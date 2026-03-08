@@ -1,0 +1,74 @@
+// RISC-V RV32I Test Program (Hex-encoded instructions)
+// =======================================================
+// This program exercises ADD, SUB, AND, OR, ADDI, and
+// the custom convolution instruction.
+//
+// Instruction Encoding Reference (RV32I):
+//   R-type: [funct7][rs2][rs1][funct3][rd][opcode]
+//   I-type: [imm[11:0]][rs1][funct3][rd][opcode]
+//
+// Program:
+//   0x00:  ADDI x1,  x0, 10     -> x1  = 10
+//   0x04:  ADDI x2,  x0, 20     -> x2  = 20
+//   0x08:  NOP  (ADDI x0,x0,0)  -> pipeline spacer
+//   0x0C:  NOP                   -> pipeline spacer
+//   0x10:  ADD  x3,  x1, x2     -> x3  = 30
+//   0x14:  SUB  x4,  x1, x2     -> x4  = -10 (0xFFFFFFF6)
+//   0x18:  AND  x5,  x1, x2     -> x5  = 0
+//   0x1C:  OR   x6,  x1, x2     -> x6  = 30 (0x1E)
+//   0x20:  ADDI x7,  x1, 5      -> x7  = 15
+//   0x24:  CUSTOM x8             -> x8  = convolution result (25)
+//   0x28:  NOP
+//   0x2C:  NOP
+//   ... remaining are NOPs
+// =======================================================
+
+// ADDI x1, x0, 10     -> imm=10=0x00A, rs1=0, funct3=000, rd=1, opcode=0010011
+// 000000001010_00000_000_00001_0010011 = 0x00A00093
+00A00093
+
+// ADDI x2, x0, 20     -> imm=20=0x014, rs1=0, funct3=000, rd=2, opcode=0010011
+// 000000010100_00000_000_00010_0010011 = 0x01400113
+01400113
+
+// NOP (ADDI x0, x0, 0) -> allows x1 to be written back before use
+00000013
+
+// NOP
+00000013
+
+// ADD x3, x1, x2      -> funct7=0000000, rs2=2, rs1=1, funct3=000, rd=3, opcode=0110011
+// 0000000_00010_00001_000_00011_0110011 = 0x002081B3
+002081B3
+
+// SUB x4, x1, x2      -> funct7=0100000, rs2=2, rs1=1, funct3=000, rd=4, opcode=0110011
+// 0100000_00010_00001_000_00100_0110011 = 0x40208233
+40208233
+
+// AND x5, x1, x2      -> funct7=0000000, rs2=2, rs1=1, funct3=111, rd=5, opcode=0110011
+// 0000000_00010_00001_111_00101_0110011 = 0x0020F2B3
+0020F2B3
+
+// OR x6, x1, x2       -> funct7=0000000, rs2=2, rs1=1, funct3=110, rd=6, opcode=0110011
+// 0000000_00010_00001_110_00110_0110011 = 0x0020E333
+0020E333
+
+// ADDI x7, x1, 5      -> imm=5=0x005, rs1=1, funct3=000, rd=7, opcode=0010011
+// 000000000101_00001_000_00111_0010011 = 0x00508393
+00508393
+
+// CUSTOM x8 (conv accel) -> rd=8, opcode=0001011
+// 000000000000_00000_000_01000_0001011 = 0x0000040B
+0000040B
+
+// NOP padding (pipeline drain)
+00000013
+00000013
+00000013
+00000013
+00000013
+00000013
+00000013
+00000013
+00000013
+00000013
