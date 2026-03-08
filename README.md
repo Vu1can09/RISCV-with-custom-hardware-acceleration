@@ -58,28 +58,26 @@ A complete, from-scratch **RISC-V RV32I 5-stage pipelined processor** extended w
 
 ```
 .
-├── rtl/                              # Verilog RTL source files (Simulation-friendly)
-├── OpenLane/src/                     # Synthesis-compliant RTL source files
-├── scripts/                          # Custom EDA scripts
-│   ├── synth.tcl                     #   Yosys Logic Synthesis script
-│   └── physical_design.tcl           #   OpenROAD Physical Design script
-├── build/                            # Generated physical design outputs
-│   └── riscv_core_top.def            #   Final routed physical layout
+├── rtl/                              # Verilog RTL source files
 ├── tb/
 │   └── riscv_testbench.v             # Testbench with auto pass/fail checks
 ├── sim/
 │   ├── instructions.mem              # Hand-assembled test program (hex)
 │   ├── run_simulation.sh             # One-command compile + simulate script
 │   └── waveform.vcd                  # Generated waveform (after simulation)
-├── python/                           # Reference models and validation
-│   ├── convolution_reference.py      #   NumPy convolution reference model
-│   ├── test_vector_generator.py      #   Generates hex test vectors for Verilog
-│   └── validation_script.py          #   Compares Verilog output vs. Python
-├── docs/                             # Documentation
-│   ├── architecture_overview.md      #   Pipeline & accelerator architecture
-│   ├── methodology.md                #   Design methodology flow
-│   └── module_descriptions.md        #   Per-module signal tables
+├── python/
+│   ├── convolution_reference.py      # NumPy convolution reference model
+│   ├── test_vector_generator.py      # Generates hex test vectors for Verilog
+│   └── validation_script.py          # Compares Verilog output vs. Python
+├── docs/
+│   ├── architecture_overview.md      # Pipeline & accelerator architecture
+│   ├── methodology.md                # Design methodology flow
+│   └── module_descriptions.md        # Per-module signal tables
 └── diagrams/                         # Architecture diagrams (PNG)
+    ├── processor_block_diagram.png
+    ├── pipeline_datapath_diagram.png
+    ├── convolution_accelerator_diagram.png
+    └── system_flowchart.png
 ```
 
 ---
@@ -88,12 +86,11 @@ A complete, from-scratch **RISC-V RV32I 5-stage pipelined processor** extended w
 
 ### Prerequisites
 
-| Tool             | Install Command                              | Purpose                      |
-|------------------|----------------------------------------------|------------------------------|
-| **Icarus Verilog** | `brew install icarus-verilog`              | RTL Simulation               |
-| **GTKWave 4.x**   | `brew install --HEAD randomplum/gtkwave/gtkwave` | Waveform Viewing           |
-| **Python 3 + NumPy** | `pip3 install numpy`                     | Algorithm Validation         |
-| **Docker Desktop** | [Install Here](https://www.docker.com/)     | Bare-Metal ASIC Flow        |
+| Tool             | Install Command                              |
+|------------------|----------------------------------------------|
+| **Icarus Verilog** | `brew install icarus-verilog`              |
+| **GTKWave 4.x**   | `brew install --HEAD randomplum/gtkwave/gtkwave` |
+| **Python 3 + NumPy** | `pip3 install numpy`                     |
 
 > **Note for macOS users:** The old GTKWave cask (3.3.107) is incompatible with macOS 14+. Use the `randomplum/gtkwave` tap shown above for version 4.x.
 
@@ -120,28 +117,13 @@ You should see output like:
  [PASS] x8 = 25 / 0x19 (CONV accelerator)
 ```
 
-### 2. Bare-Metal Physical Design (ASIC Flow)
-
-This project includes a custom, industrial-grade **Bare-Metal OpenROAD Flow** that transforms your RTL into a physical chip layout without the complexity of full OpenLane.
-
-```bash
-# Run logic synthesis and physical placement/routing
-./run_custom_flow.sh
-```
-
-**Results:**
-- **Logic synthesis:** Maps Verilog to Skywater 130nm standard cells.
-- **Physical Design:** Automated Floorplan, PDN, Placement, and Routing.
-- **Signoff:** Achieves **0 DRC violations** with 66MHz timing closure.
-- **Output:** View the final design at `build/riscv_core_top.def` using KLayout.
-
-### 3. View Waveforms
+### 2. View Waveforms
 
 ```bash
 gtkwave sim/waveform.vcd
 ```
 
-### 4. Run Python Reference Model
+### 3. Run Python Reference Model
 
 ```bash
 python3 python/convolution_reference.py       # See convolution math
