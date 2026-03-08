@@ -1,7 +1,8 @@
 //============================================================================
-// Testbench: RISC-V 5-Stage Pipeline Processor
-// Description: Instantiates the RISC-V processor, provides clock and reset,
-//              loads instruction memory, runs simulation and records VCD.
+// Testbench: RISC-V 5-Stage Pipeline — Complex Stress Test
+// Description: Tests back-to-back data dependencies, forwarding chains,
+//              negative immediates, and convolution accelerator with
+//              complex input/kernel values.
 //============================================================================
 
 `timescale 1ns / 1ps
@@ -14,7 +15,6 @@ module riscv_testbench;
     reg clk;
     reg reset;
 
-    // Clock generation: 10ns period (100 MHz)
     initial clk = 0;
     always #5 clk = ~clk;
 
@@ -37,111 +37,165 @@ module riscv_testbench;
     //==========================================================================
     // Simulation Control
     //==========================================================================
+    integer pass_count;
+    integer fail_count;
+
     initial begin
-        $display("===========================================");
-        $display(" RISC-V RV32I 5-Stage Pipeline Simulation");
-        $display("===========================================");
+        pass_count = 0;
+        fail_count = 0;
+
+        $display("==========================================================");
+        $display(" RISC-V RV32I 5-Stage Pipeline — COMPLEX STRESS TEST");
+        $display("==========================================================");
         $display("");
 
         // Assert reset
         reset = 1;
         #20;
-
-        // Release reset
         reset = 0;
         $display("TIME=%0t | Reset released, starting execution...", $time);
         $display("");
 
-        // Run for enough cycles to complete the test program
-        // The test program has ~12 instructions + pipeline fill/drain
-        #500;
+        // Run for enough cycles (program + accelerator stall + drain)
+        #800;
 
         $display("");
-        $display("===========================================");
+        $display("==========================================================");
         $display(" Register File Final State");
-        $display("===========================================");
-
-        // Display non-zero registers
-        $display(" x1  = 0x%08h", u_dut.u_regfile.registers[1]);
-        $display(" x2  = 0x%08h", u_dut.u_regfile.registers[2]);
-        $display(" x3  = 0x%08h", u_dut.u_regfile.registers[3]);
-        $display(" x4  = 0x%08h", u_dut.u_regfile.registers[4]);
-        $display(" x5  = 0x%08h", u_dut.u_regfile.registers[5]);
-        $display(" x6  = 0x%08h", u_dut.u_regfile.registers[6]);
-        $display(" x7  = 0x%08h", u_dut.u_regfile.registers[7]);
-        $display(" x8  = 0x%08h", u_dut.u_regfile.registers[8]);
-        $display(" x9  = 0x%08h", u_dut.u_regfile.registers[9]);
-        $display(" x10 = 0x%08h", u_dut.u_regfile.registers[10]);
-
-        $display("");
-        $display("===========================================");
-        $display(" Expected Results");
-        $display("===========================================");
-        $display(" x1 = 10  (ADDI x1, x0, 10)");
-        $display(" x2 = 20  (ADDI x2, x0, 20)");
-        $display(" x3 = 30  (ADD  x3, x1, x2)  => 10 + 20 = 30");
-        $display(" x4 = -10 (SUB  x4, x1, x2)  => 10 - 20 = -10 = 0xFFFFFFF6");
-        $display(" x5 = 0   (AND  x5, x1, x2)  => 10 & 20 = 0x0A & 0x14 = 0");
-        $display(" x6 = 30  (OR   x6, x1, x2)  => 10 | 20 = 0x0A | 0x14 = 0x1E = 30");
-        $display(" x7 = 15  (ADDI x7, x1, 5)   => 10 + 5 = 15");
-        $display(" x8 = 25  (CONV x8) accel result");
+        $display("==========================================================");
+        $display(" x1  = 0x%08h  (%0d)", u_dut.u_regfile.registers[1],  u_dut.u_regfile.registers[1]);
+        $display(" x2  = 0x%08h  (%0d)", u_dut.u_regfile.registers[2],  u_dut.u_regfile.registers[2]);
+        $display(" x3  = 0x%08h  (%0d)", u_dut.u_regfile.registers[3],  u_dut.u_regfile.registers[3]);
+        $display(" x4  = 0x%08h  (%0d)", u_dut.u_regfile.registers[4],  u_dut.u_regfile.registers[4]);
+        $display(" x5  = 0x%08h  (%0d)", u_dut.u_regfile.registers[5],  u_dut.u_regfile.registers[5]);
+        $display(" x6  = 0x%08h  (%0d)", u_dut.u_regfile.registers[6],  u_dut.u_regfile.registers[6]);
+        $display(" x7  = 0x%08h  (%0d)", u_dut.u_regfile.registers[7],  u_dut.u_regfile.registers[7]);
+        $display(" x8  = 0x%08h  (%0d)", u_dut.u_regfile.registers[8],  u_dut.u_regfile.registers[8]);
+        $display(" x9  = 0x%08h  (%0d)", u_dut.u_regfile.registers[9],  u_dut.u_regfile.registers[9]);
+        $display(" x10 = 0x%08h  (%0d)", u_dut.u_regfile.registers[10], u_dut.u_regfile.registers[10]);
+        $display(" x11 = 0x%08h  (%0d)", u_dut.u_regfile.registers[11], u_dut.u_regfile.registers[11]);
 
         $display("");
-        $display("===========================================");
-        $display(" Verification");
-        $display("===========================================");
+        $display("==========================================================");
+        $display(" Verification (Complex Stress Test)");
+        $display("==========================================================");
 
-        // Verify results
-        if (u_dut.u_regfile.registers[1] == 32'd10)
-            $display(" [PASS] x1 = 10");
-        else
-            $display(" [FAIL] x1 = %0d (expected 10)", u_dut.u_regfile.registers[1]);
+        // x1 = ADDI x1, x0, 100 => 100
+        if (u_dut.u_regfile.registers[1] == 32'd100) begin
+            $display(" [PASS] x1 = 100  (ADDI x1, x0, 100)");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x1 = %0d (expected 100)", u_dut.u_regfile.registers[1]);
+            fail_count = fail_count + 1;
+        end
 
-        if (u_dut.u_regfile.registers[2] == 32'd20)
-            $display(" [PASS] x2 = 20");
-        else
-            $display(" [FAIL] x2 = %0d (expected 20)", u_dut.u_regfile.registers[2]);
+        // x2 = ADDI x2, x0, 55 => 55
+        if (u_dut.u_regfile.registers[2] == 32'd55) begin
+            $display(" [PASS] x2 = 55   (ADDI x2, x0, 55)");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x2 = %0d (expected 55)", u_dut.u_regfile.registers[2]);
+            fail_count = fail_count + 1;
+        end
 
-        if (u_dut.u_regfile.registers[3] == 32'd30)
-            $display(" [PASS] x3 = 30 (ADD)");
-        else
-            $display(" [FAIL] x3 = %0d (expected 30)", u_dut.u_regfile.registers[3]);
+        // x3 = ADD x3, x1, x2 => 100 + 55 = 155 (back-to-back forwarding)
+        if (u_dut.u_regfile.registers[3] == 32'd155) begin
+            $display(" [PASS] x3 = 155  (ADD x3, x1, x2) [FWD: x1 from EX/MEM, x2 mid-pipe]");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x3 = %0d (expected 155)", u_dut.u_regfile.registers[3]);
+            fail_count = fail_count + 1;
+        end
 
-        if (u_dut.u_regfile.registers[4] == 32'hFFFFFFF6)
-            $display(" [PASS] x4 = -10 / 0xFFFFFFF6 (SUB)");
-        else
-            $display(" [FAIL] x4 = 0x%08h (expected 0xFFFFFFF6)", u_dut.u_regfile.registers[4]);
+        // x4 = SUB x4, x3, x1 => 155 - 100 = 55 (chain: x3 just computed)
+        if (u_dut.u_regfile.registers[4] == 32'd55) begin
+            $display(" [PASS] x4 = 55   (SUB x4, x3, x1) [FWD: x3 from EX/MEM]");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x4 = %0d (expected 55)", u_dut.u_regfile.registers[4]);
+            fail_count = fail_count + 1;
+        end
 
-        if (u_dut.u_regfile.registers[5] == 32'd0)
-            $display(" [PASS] x5 = 0 (AND)");
-        else
-            $display(" [FAIL] x5 = %0d (expected 0)", u_dut.u_regfile.registers[5]);
+        // x5 = ADD x5, x3, x4 => 155 + 55 = 210 (double forwarding: x3 MEM/WB, x4 EX/MEM)
+        if (u_dut.u_regfile.registers[5] == 32'd210) begin
+            $display(" [PASS] x5 = 210  (ADD x5, x3, x4) [FWD: x3 MEM/WB, x4 EX/MEM]");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x5 = %0d (expected 210)", u_dut.u_regfile.registers[5]);
+            fail_count = fail_count + 1;
+        end
 
-        if (u_dut.u_regfile.registers[6] == 32'h0000001E)
-            $display(" [PASS] x6 = 30 / 0x1E (OR)");
-        else
-            $display(" [FAIL] x6 = 0x%08h (expected 0x0000001E)", u_dut.u_regfile.registers[6]);
+        // x6 = AND x6, x1, x2 => 0x64 & 0x37 = 0x24 = 36
+        if (u_dut.u_regfile.registers[6] == 32'd36) begin
+            $display(" [PASS] x6 = 36   (AND x6, x1, x2) [0x64 & 0x37 = 0x24]");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x6 = 0x%08h (expected 36 / 0x24)", u_dut.u_regfile.registers[6]);
+            fail_count = fail_count + 1;
+        end
 
-        if (u_dut.u_regfile.registers[7] == 32'd15)
-            $display(" [PASS] x7 = 15 (ADDI)");
-        else
-            $display(" [FAIL] x7 = %0d (expected 15)", u_dut.u_regfile.registers[7]);
+        // x7 = OR x7, x1, x2 => 0x64 | 0x37 = 0x77 = 119
+        if (u_dut.u_regfile.registers[7] == 32'd119) begin
+            $display(" [PASS] x7 = 119  (OR  x7, x1, x2) [0x64 | 0x37 = 0x77]");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x7 = 0x%08h (expected 119 / 0x77)", u_dut.u_regfile.registers[7]);
+            fail_count = fail_count + 1;
+        end
 
-        if (u_dut.u_regfile.registers[8] == 32'h00000019)
-            $display(" [PASS] x8 = 25 / 0x19 (CONV accelerator)");
-        else
-            $display(" [FAIL] x8 = 0x%08h (expected 0x00000019 = 25)", u_dut.u_regfile.registers[8]);
+        // x8 = ADDI x8, x5, -10 => 210 - 10 = 200 (negative immediate)
+        if (u_dut.u_regfile.registers[8] == 32'd200) begin
+            $display(" [PASS] x8 = 200  (ADDI x8, x5, -10) [negative imm, FWD from MEM/WB]");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x8 = %0d (expected 200)", u_dut.u_regfile.registers[8]);
+            fail_count = fail_count + 1;
+        end
+
+        // x9 = SUB x9, x8, x7 => 200 - 119 = 81
+        if (u_dut.u_regfile.registers[9] == 32'd81) begin
+            $display(" [PASS] x9 = 81   (SUB x9, x8, x7) [FWD: x8 from EX/MEM]");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x9 = %0d (expected 81)", u_dut.u_regfile.registers[9]);
+            fail_count = fail_count + 1;
+        end
+
+        // x10 = ADD x10, x9, x6 => 81 + 36 = 117
+        if (u_dut.u_regfile.registers[10] == 32'd117) begin
+            $display(" [PASS] x10 = 117 (ADD x10, x9, x6) [FWD: x9 from EX/MEM]");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x10 = %0d (expected 117)", u_dut.u_regfile.registers[10]);
+            fail_count = fail_count + 1;
+        end
+
+        // x11 = CONV => 109 (0x6D)
+        // Kernel [[2,1,3],[1,4,1],[3,1,2]] * Input [[5,3,7],[2,8,4],[6,1,9]]
+        if (u_dut.u_regfile.registers[11] == 32'h0000006D) begin
+            $display(" [PASS] x11 = 109 (CONV accelerator) [kernel*input = 0x6D]");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x11 = 0x%08h / %0d (expected 109 / 0x6D)", u_dut.u_regfile.registers[11], u_dut.u_regfile.registers[11]);
+            fail_count = fail_count + 1;
+        end
 
         $display("");
-        $display("===========================================");
-        $display(" Simulation Complete");
-        $display("===========================================");
+        $display("==========================================================");
+        $display(" Results: %0d PASSED, %0d FAILED out of 11 tests", pass_count, fail_count);
+        $display("==========================================================");
 
+        if (fail_count == 0)
+            $display(" >>> ALL TESTS PASSED <<<");
+        else
+            $display(" >>> SOME TESTS FAILED <<<");
+
+        $display("");
         $finish;
     end
 
     //==========================================================================
-    // Pipeline stage monitor (optional detailed trace)
+    // Pipeline trace
     //==========================================================================
     always @(posedge clk) begin
         if (!reset) begin

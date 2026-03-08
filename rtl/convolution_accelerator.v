@@ -4,10 +4,8 @@
 //              Uses a MAC unit to perform multiply-accumulate over a 3x3 window.
 //              FSM: IDLE -> COMPUTE -> DONE
 //
-//              The accelerator holds a fixed 3x3 kernel and a 3x3 input window.
-//              These are preloaded at reset for demonstration purposes.
-//              On receiving 'start', it computes the dot product of the two
-//              3x3 matrices and outputs the result.
+//              Kernel and input window are loaded from external .mem files
+//              for easy test vector injection.
 //============================================================================
 
 module convolution_accelerator (
@@ -64,20 +62,10 @@ module convolution_accelerator (
         .accumulator (mac_acc)
     );
 
-    // Initialize kernel and input window with fixed test values
-    integer i;
-    always @(posedge clk or posedge reset) begin
-        if (reset) begin
-            // Sample kernel: [[1,0,1],[0,1,0],[1,0,1]]
-            kernel[0] <= 8'd1; kernel[1] <= 8'd0; kernel[2] <= 8'd1;
-            kernel[3] <= 8'd0; kernel[4] <= 8'd1; kernel[5] <= 8'd0;
-            kernel[6] <= 8'd1; kernel[7] <= 8'd0; kernel[8] <= 8'd1;
-
-            // Sample input window: [[1,2,3],[4,5,6],[7,8,9]]
-            input_window[0] <= 8'd1; input_window[1] <= 8'd2; input_window[2] <= 8'd3;
-            input_window[3] <= 8'd4; input_window[4] <= 8'd5; input_window[5] <= 8'd6;
-            input_window[6] <= 8'd7; input_window[7] <= 8'd8; input_window[8] <= 8'd9;
-        end
+    // Load kernel and input window from external files
+    initial begin
+        $readmemh("accel_kernel.mem", kernel);
+        $readmemh("accel_input.mem", input_window);
     end
 
     // FSM state register

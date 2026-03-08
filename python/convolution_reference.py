@@ -90,7 +90,6 @@ def main():
 
     # Example 3: Random inputs
     print("--- Example 3: Random Inputs ---")
-    np.random.seed(42)
     rand_input = np.random.randint(0, 10, (5, 5))
     rand_kernel = np.random.randint(0, 5, (3, 3))
     rand_output = convolve2d(rand_input, rand_kernel)
