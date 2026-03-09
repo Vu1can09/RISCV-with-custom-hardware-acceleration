@@ -45,7 +45,23 @@ module pipeline_register_id_ex (
 );
 
     always @(posedge clk or posedge reset) begin
-        if (reset || flush) begin
+        if (reset)  begin
+            // Insert NOP bubble
+            reg_write_out   <= 1'b0;
+            alu_src_out     <= 1'b0;
+            alu_ctrl_out    <= 4'b0000;
+            mem_read_out    <= 1'b0;
+            mem_write_out   <= 1'b0;
+            mem_to_reg_out  <= 2'b00;
+            accel_start_out <= 1'b0;
+            pc_out          <= 32'd0;
+            rs1_data_out    <= 32'd0;
+            rs2_data_out    <= 32'd0;
+            immediate_out   <= 32'd0;
+            rd_addr_out     <= 5'd0;
+            rs1_addr_out    <= 5'd0;
+            rs2_addr_out    <= 5'd0;
+        end else if (reset)  begin
             // Insert NOP bubble
             reg_write_out   <= 1'b0;
             alu_src_out     <= 1'b0;

@@ -361,11 +361,11 @@ module riscv_core_top (
     //==========================================================================
     // Debug: Monitor register writes (for simulation)
     //==========================================================================
-    always @(posedge clk) begin
+    /*always @(posedge clk) begin
         if (memwb_reg_write && (memwb_rd_addr != 5'd0)) begin
             $display("TIME=%0t | WB: x%0d = 0x%08h",
-                     $time, memwb_rd_addr, wb_write_data);
-        end
-    end
+                    $time, memwb_rd_addr, wb_write_data);
+      end
+    end*/
 
 endmodule

@@ -19,7 +19,10 @@ module pipeline_register_if_id (
 );
 
     always @(posedge clk or posedge reset) begin
-        if (reset || flush) begin
+        if (reset ) begin
+            pc_out          <= 32'd0;
+            instruction_out <= 32'h0000_0013; // NOP (ADDI x0, x0, 0)
+        end else if (flush) begin
             pc_out          <= 32'd0;
             instruction_out <= 32'h0000_0013; // NOP (ADDI x0, x0, 0)
         end else if (!stall) begin
