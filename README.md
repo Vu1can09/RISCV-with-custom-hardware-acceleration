@@ -1,47 +1,55 @@
-# 🖥️ RISC-V RV32I Processor with Custom Convolution Accelerator
+# 🖥️ RISC-V RV32I Processor with custom Edge AI CNN Accelerator
 
-A complete, from-scratch **RISC-V RV32I 5-stage pipelined processor** extended with a **custom hardware accelerator** for 3×3 convolution — built for Edge AI workloads.
+A complete, from-scratch **RISC-V RV32I 5-stage pipelined processor** combined with a custom **Processor-Controlled CNN Accelerator** for edge AI applications.
 
-> **Mini Project** — Designed to be a learning resource for students exploring processor architecture, custom instruction extensions, and hardware acceleration.
+> **Mini Project** — Designed to be a learning resource for students exploring processor architecture, hardware acceleration, and FPGA implementation flows.
 
 ---
 
 ## ✨ What This Project Demonstrates
 
-- **RISC-V microarchitecture design** — classic 5-stage pipeline (IF → ID → EX → MEM → WB)
-- **Pipeline hazard handling** — data forwarding + load-use stall detection
-- **Custom instruction extension** — adding a new opcode (`0001011`) to the ISA
-- **Hardware acceleration** — FSM-driven multiply-accumulate convolution engine
-- **Algorithm-to-hardware validation** — Python reference model vs. Verilog simulation
-- **Full RTL simulation workflow** — Icarus Verilog → VCD → GTKWave
+1. **RISC-V microarchitecture design** — classic 5-stage pipeline (IF → ID → EX → MEM → WB).
+2. **Custom Hardware Acceleration** — MMIO-controlled 3D Convolution engine supporting LeNet-style inference.
+3. **Pipeline hazard handling** — data forwarding + load-use stall detection.
+4. **Full RTL & Python Verification workflow** — Icarus Verilog, GTKWave, and mathematical regression modeling via NumPy.
 
 ---
 
 ## 📐 Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                       RISC-V Core (5-Stage Pipeline)             │
-│                                                                  │
-│   ┌────┐  IF/ID  ┌────┐  ID/EX  ┌────┐  EX/MEM  ┌────┐  MEM/WB  ┌────┐  │
-│   │ IF │───────▶│ ID │───────▶│ EX │────────▶│MEM │────────▶│ WB │  │
-│   │    │        │    │        │    │         │    │         │    │  │
-│   │ PC │        │Ctrl│        │ALU │         │Data│         │Mux │  │
-│   │IMEM│        │RegF│        │Fwd │         │Mem │         │    │  │
-│   └────┘        └────┘        └──┬─┘         └────┘         └────┘  │
-│                                  │                                   │
-│                         ┌────────▼────────┐                          │
-│                         │  Convolution     │                         │
-│                         │  Accelerator     │                         │
-│                         │  (MAC Unit FSM)  │                         │
-│                         └─────────────────┘                          │
-│                                                                      │
-│   Forwarding: EX/MEM → EX, MEM/WB → EX, WB → ID (write-first)      │
-│   Hazards:    Load-use stall + Accelerator stall                     │
-└──────────────────────────────────────────────────────────────────────┘
+### Top-Level Integration
+
+The system centers around the RISC-V Controller dispatching configuration and execution commands to the Edge AI subsystem via Memory-Mapped IO.
+
+```text
+                Input Image
+                     │
+                     ▼
+                Image Buffer
+                     │
+                     ▼
+                 RISC-V Core
+           (CNN Controller / Brain)
+                     │
+           Control + Configuration
+                     │
+        ┌────────────┼────────────┐
+        ▼            ▼            ▼
+
+   Conv3D Layer1  Conv3D Layer2  Conv3D Layer3
+        │            │            │
+        ▼            ▼            ▼
+
+     FeatureMap1  FeatureMap2  FeatureMap3
+                     │
+                     ▼
+              Fully Connected
+                     │
+                     ▼
+                Classification
 ```
 
-### Supported Instructions
+### Supported RISC-V Instructions
 
 | Type     | Instruction | Description                                  |
 |----------|-------------|----------------------------------------------|
@@ -50,39 +58,28 @@ A complete, from-scratch **RISC-V RV32I 5-stage pipelined processor** extended w
 | R-type   | `SUB`       | Register subtraction                         |
 | R-type   | `AND`       | Bitwise AND                                  |
 | R-type   | `OR`        | Bitwise OR                                   |
-| **Custom** | **`CONV`** | **Trigger convolution accelerator** (opcode `0001011`) |
 
 ---
 
 ## 📁 Project Structure
 
-```
+```text
 .
-├── rtl/                              # Verilog RTL source files
-├── tb/
-│   └── riscv_testbench.v             # Testbench with auto pass/fail checks
-├── sim/
-│   ├── instructions.mem              # Hand-assembled test program (hex)
-│   ├── run_simulation.sh             # One-command compile + simulate script
-│   └── waveform.vcd                  # Generated waveform (after simulation)
-├── python/
-│   ├── convolution_reference.py      # NumPy convolution reference model
-│   ├── test_vector_generator.py      # Generates hex test vectors for Verilog
-│   └── validation_script.py          # Compares Verilog output vs. Python
-├── docs/
-│   ├── architecture_overview.md      # Pipeline & accelerator architecture
-│   ├── methodology.md                # Design methodology flow
-│   └── module_descriptions.md        # Per-module signal tables
-└── diagrams/                         # Architecture diagrams (PNG)
-    ├── processor_block_diagram.png
-    ├── pipeline_datapath_diagram.png
-    ├── convolution_accelerator_diagram.png
-    └── system_flowchart.png
+├── rtl/                              # Core RISC-V Pipeline Modules
+├── sim/                              # Core RISC-V simulation collateral
+├── tb/                               # Core RISC-V and Top-level integration testbenches
+├── docs/                             # Core RISC-V design methodology
+├── edge_ai_cnn_accelerator/          # Dedicated CNN Accelerator Subsystem
+│   ├── rtl/                          # 3D Convolution Datapath and Controllers
+│   ├── tb/                           # CNN Component testbenches
+│   ├── scripts/                      # Regression testing pipelines
+│   ├── python_reference/             # Mathematical verification ground truths
+│   └── docs/                         # Detailed Accelerator Architecture
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (CNN Accelerator Environment)
 
 ### Prerequisites
 
@@ -92,7 +89,7 @@ A complete, from-scratch **RISC-V RV32I 5-stage pipelined processor** extended w
 | **GTKWave 4.x**   | `brew install --HEAD randomplum/gtkwave/gtkwave` |
 | **Python 3 + NumPy** | `pip3 install numpy`                     |
 
-> **Note for macOS users:** The old GTKWave cask (3.3.107) is incompatible with macOS 14+. Use the `randomplum/gtkwave` tap shown above for version 4.x.
+> **Note for macOS users:** The old GTKWave cask (3.3.107) is incompatible with macOS 14+. Use the `randomplum/gtkwave` tap shown above.
 
 ### 1. Clone & Simulate
 
@@ -100,109 +97,70 @@ A complete, from-scratch **RISC-V RV32I 5-stage pipelined processor** extended w
 git clone https://github.com/Vu1can09/RISCV-with-custom-hardware-acceleration.git
 cd RISCV-with-custom-hardware-acceleration
 
-# Compile + run simulation (one command)
-bash sim/run_simulation.sh
+# Run complete CNN verification pipeline
+cd edge_ai_cnn_accelerator/scripts
+./regression_test.sh
 ```
 
-You should see output like:
+You should see regression output indicating `PASS` for components such as the **MAC Array**, **Conv3D Pipeline**, and **RISC-V Integrations**.
 
-```
- [PASS] x1 = 10
- [PASS] x2 = 20
- [PASS] x3 = 30 (ADD)
- [PASS] x4 = -10 / 0xFFFFFFF6 (SUB)
- [PASS] x5 = 0 (AND)
- [PASS] x6 = 30 / 0x1E (OR)
- [PASS] x7 = 15 (ADDI)
- [PASS] x8 = 25 / 0x19 (CONV accelerator)
-```
-
-### 2. View Waveforms
-
+### 2. Verify against mathematical truths
 ```bash
-gtkwave sim/waveform.vcd
+cd edge_ai_cnn_accelerator
+python3 python_reference/cnn_reference_model.py
 ```
+Outputs the standard convolution validation arrays matching the expected sums computed in `tb/conv3d_accelerator_tb.v`.
 
-### 3. Run Python Reference Model
+---
 
+## 🔍 How It Works: CNN Hardware Accelerator
+
+### MMIO Interfaces
+
+The RISC-V writes parameters like `INPUT_WIDTH`, `INPUT_HEIGHT`, and `CHANNELS` through a dedicated memory-mapped interface. Once initialized, the firmware pulses the `START` register to trigger computation.
+
+### Complete RTL Modules Breakdown
+
+The hardware is modularized into specialized functional block designs, all written in synthesizable Verilog:
+
+1. **`mac_array.v`**: The core math unit. Implements 9 pipelined multipliers computing `a[i] * w[i]` followed by an adder tree accumulating them into a single 20-bit product.
+2. **`line_buffer.v`**: Utilizes dual FIFOs maintaining historical row vectors to construct 2D spatial context dynamically across varying image widths.
+3. **`sliding_window.v`**: Receives 3 column vectors every clock, shifts previous variables right, and exposes a flattened vector of 9 simultaneous spatial variables to the MAC Array.
+4. **`channel_accumulator.v`**: Maintains a running tally of intermediate MAC array outputs. It asserts `clear` at the completion of spatial tensor boundaries.
+5. **`conv3d_accelerator.v`**: The structural wrapper organizing the line buffers, sliding windows, and MAC units into a single cohesive data stream.
+6. **`cnn_controller.v`**: A Moore Finite State Machine (FSM) spanning `IDLE` -> `LOAD_WINDOW` -> `MULTIPLY` -> `ACCUMULATE` -> `WRITE_OUTPUT`. It coordinates memory read requests and enables accelerator modules.
+7. **`cnn_register_interface.v`**: An adaptable MMIO address map exposing software configurations (`input_width`, `channels`, etc.) to the CNN Controller hardware.
+8. **`riscv_core_controller.v`**: A soft-core module driving a predefined instruction sequence mimicking firmware execution. 
+9. **`edge_ai_cnn_top.v`**: The primary integration wrapper tying the RISC-V controller to the CNN datapath.
+
+### Verification Environment (Testbenches)
+
+A multi-tiered testbench setup systematically proves correctness mapping from fundamental arithmetic up to full system integration:
+
+1. **`mac_array_tb.v`**: Tests combinational multiply-accumulate arithmetic logic on 3x3 sliding windows, pushing constant values and complex vectors to ensure no overflow and correct bit-width mapping.
+2. **`sliding_window_tb.v`**: Isolates the vector generation logic, feeding rows of pixels and monitoring the resulting flattened 3x3 window vector outputs across clock cycles.
+3. **`conv3d_accelerator_tb.v`**: Validates the sequential streaming logic, packing sliding windows, utilizing the MAC, and tracking internal channel accumulator loops.
+4. **`cnn_controller_tb.v`**: Tracks FSM transition validity across control signal boundaries ensuring correct state tracking.
+5. **`riscv_control_tb.v`**: Examines hardware/software boundary, making sure register writes target correct memory map addresses over the system bus.
+6. **`system_integration_tb.v`**: The capstone integration test running the instantiated RISC-V controller orchestrating the full sub-pipeline until a theoretical `DONE` interrupt flag pulses.
+
+### Verification against mathematical truths
+The testbenches mirror expected results tracked in pure python.
 ```bash
-python3 python/convolution_reference.py       # See convolution math
-python3 python/test_vector_generator.py       # Generate test vectors
-python3 python/validation_script.py           # Validate against reference
+cd edge_ai_cnn_accelerator
+python3 python_reference/cnn_reference_model.py
 ```
-
----
-
-## 🔍 How It Works
-
-### The Pipeline
-
-Each instruction flows through 5 stages over 5 clock cycles:
-
-| Cycle | Stage | What Happens |
-|-------|-------|-------------|
-| 1     | **IF**  | Fetch instruction from memory using PC |
-| 2     | **ID**  | Decode opcode, read registers, generate control signals |
-| 3     | **EX**  | ALU computes result (or accelerator starts) |
-| 4     | **MEM** | Read/write data memory (if needed) |
-| 5     | **WB**  | Write result back to register file |
-
-### Hazard Handling
-
-- **Data Forwarding** — Results from EX/MEM and MEM/WB stages are forwarded back to EX stage inputs, avoiding stalls for most data dependencies
-- **Write-First Register File** — When WB writes a register in the same cycle ID reads it, the new value is forwarded immediately
-- **Load-Use Stall** — If an instruction in EX is a load and the next instruction in ID needs that value, the pipeline inserts a 1-cycle bubble
-
-### The Convolution Accelerator
-
-When the processor encounters the custom `CONV` instruction (opcode `0001011`):
-
-1. The pipeline **stalls** (all stages freeze)
-2. The accelerator's FSM moves from **IDLE → COMPUTE → DONE**
-3. Over 9 cycles, it multiplies each element of a 3×3 input window with a 3×3 kernel and accumulates the result
-4. When **DONE**, the result (e.g., `25`) is written back to the destination register
-5. The pipeline **resumes** normal operation
-
-**Example:** Input `[[1,2,3],[4,5,6],[7,8,9]]` × Kernel `[[1,0,1],[0,1,0],[1,0,1]]` = `1+3+5+7+9` = **25**
-
----
-
-## 📝 Test Program
-
-The test program in [`sim/instructions.mem`](sim/instructions.mem) executes:
-
-```assembly
-ADDI x1, x0, 10      # x1 = 10
-ADDI x2, x0, 20      # x2 = 20
-NOP                   # pipeline spacer
-NOP                   # pipeline spacer
-ADD  x3, x1, x2      # x3 = 10 + 20 = 30
-SUB  x4, x1, x2      # x4 = 10 - 20 = -10
-AND  x5, x1, x2      # x5 = 10 & 20 = 0
-OR   x6, x1, x2      # x6 = 10 | 20 = 30
-ADDI x7, x1, 5       # x7 = 10 + 5 = 15
-CONV x8               # x8 = convolution result = 25
-```
-
----
-
-## 🧠 Key Design Decisions
-
-| Decision | Why |
-|----------|-----|
-| **Write-first register file** | Solves WB→ID same-cycle read-after-write without extra forwarding logic |
-| **Full pipeline stall for accelerator** | Simpler than out-of-order execution; accelerator takes ~12 cycles |
-| **Edge-detected start signal** | Prevents re-triggering when pipeline is frozen and `accel_start` stays high |
-| **Combinational busy on start** | Stall takes effect immediately in the same cycle the custom instruction enters EX |
+This Python script runs a generic 3D N-channel mathematical convolution loop locally using NumPy to cross-validate convolution constants with RTL outputs.
 
 ---
 
 ## 📚 Further Reading
 
+Looking to synthesize? Check out the specific detailed FPGA strategies in `edge_ai_cnn_accelerator/docs/fpga_implementation.md`.
+
 - [RISC-V ISA Specification](https://riscv.org/technical/specifications/)
 - [Patterson & Hennessy — Computer Organization and Design (RISC-V Edition)](https://www.elsevier.com/books/computer-organization-and-design-risc-v-edition/patterson/978-0-12-820331-6)
 - [Icarus Verilog Documentation](https://steveicarus.github.io/iverilog/)
-- [GTKWave User Guide](https://gtkwave.sourceforge.net/gtkwave.pdf)
 
 ---
 
@@ -213,5 +171,5 @@ This project is open-source and available for educational purposes.
 ---
 
 <p align="center">
-  Built with ❤️ for learning RISC-V architecture
+  Built with 🥀 for learning RISC-V and Edge AI architecture
 </p>

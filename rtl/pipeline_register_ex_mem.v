@@ -18,7 +18,6 @@ module pipeline_register_ex_mem (
     input  wire [31:0] alu_result_in,
     input  wire [31:0] rs2_data_in,     // Store data for memory writes
     input  wire [4:0]  rd_addr_in,
-    input  wire [31:0] accel_result_in, // Convolution accelerator result
     // Control signals out
     output reg         reg_write_out,
     output reg         mem_read_out,
@@ -27,8 +26,7 @@ module pipeline_register_ex_mem (
     // Data out
     output reg  [31:0] alu_result_out,
     output reg  [31:0] rs2_data_out,
-    output reg  [4:0]  rd_addr_out,
-    output reg  [31:0] accel_result_out
+    output reg  [4:0]  rd_addr_out
 );
 
     always @(posedge clk or posedge reset) begin
@@ -40,7 +38,6 @@ module pipeline_register_ex_mem (
             alu_result_out   <= 32'd0;
             rs2_data_out     <= 32'd0;
             rd_addr_out      <= 5'd0;
-            accel_result_out <= 32'd0;
         end else if (!stall) begin
             reg_write_out    <= reg_write_in;
             mem_read_out     <= mem_read_in;
@@ -49,7 +46,6 @@ module pipeline_register_ex_mem (
             alu_result_out   <= alu_result_in;
             rs2_data_out     <= rs2_data_in;
             rd_addr_out      <= rd_addr_in;
-            accel_result_out <= accel_result_in;
         end
     end
 

@@ -31,9 +31,14 @@ iverilog -o sim/cpu.out \
     rtl/pipeline_register_id_ex.v \
     rtl/pipeline_register_ex_mem.v \
     rtl/pipeline_register_mem_wb.v \
-    rtl/mac_unit.v \
-    rtl/convolution_accelerator.v \
-    rtl/custom_instruction_decoder.v \
+    rtl/mac_array.v \
+    rtl/sliding_window.v \
+    rtl/conv_accelerator.v \
+    rtl/cnn_controller.v \
+    rtl/feature_map_ram.v \
+    rtl/weight_ram.v \
+    rtl/cnn_register_interface.v \
+    rtl/edge_ai_cnn_top.v \
     rtl/riscv_core_top.v \
     tb/riscv_testbench.v
 

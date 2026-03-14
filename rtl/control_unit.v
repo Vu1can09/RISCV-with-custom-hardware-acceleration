@@ -20,14 +20,14 @@ module control_unit (
     output reg  [3:0]  alu_ctrl,
     output reg         mem_read,
     output reg         mem_write,
-    output reg  [1:0]  mem_to_reg,    // 00 = ALU, 01 = memory, 10 = accelerator
-    output reg         accel_start    // Start convolution accelerator
+    output reg  [1:0]  mem_to_reg     // 00 = ALU, 01 = memory, 10 = accelerator (removed)
 );
 
     // Opcode definitions
     localparam OP_R_TYPE  = 7'b0110011;
     localparam OP_I_TYPE  = 7'b0010011;
-    localparam OP_CUSTOM  = 7'b0001011;
+    localparam OP_LOAD    = 7'b0000011;
+    localparam OP_STORE   = 7'b0100011;
 
     // ALU control encoding
     localparam ALU_ADD = 4'b0000;
@@ -43,7 +43,6 @@ module control_unit (
         mem_read    = 1'b0;
         mem_write   = 1'b0;
         mem_to_reg  = 2'b00;
-        accel_start = 1'b0;
 
         case (opcode)
             // ---------------------------------------------------------
@@ -77,16 +76,24 @@ module control_unit (
                 alu_ctrl   = ALU_ADD;
                 mem_to_reg = 2'b00;  // Write ALU result
             end
-
             // ---------------------------------------------------------
-            // Custom: Trigger convolution accelerator
+            // Load and Store
             // ---------------------------------------------------------
-            OP_CUSTOM: begin
-                reg_write   = 1'b1;
-                accel_start = 1'b1;
-                mem_to_reg  = 2'b10; // Write accelerator result
+            OP_LOAD: begin
+                reg_write  = 1'b1;
+                alu_src    = 1'b1;
+                alu_ctrl   = ALU_ADD;
+                mem_read   = 1'b1;
+                mem_to_reg = 2'b01;  // Write memory read data
+            end
+            
+            OP_STORE: begin
+                alu_src    = 1'b1;
+                alu_ctrl   = ALU_ADD;
+                mem_write  = 1'b1;
             end
 
+            // ---------------------------------------------------------
             default: begin
                 // NOP – all signals remain deasserted
             end

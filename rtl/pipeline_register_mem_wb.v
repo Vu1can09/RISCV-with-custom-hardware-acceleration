@@ -15,15 +15,13 @@ module pipeline_register_mem_wb (
     input  wire [31:0] mem_data_in,     // Data read from memory
     input  wire [31:0] alu_result_in,   // ALU result pass-through
     input  wire [4:0]  rd_addr_in,
-    input  wire [31:0] accel_result_in, // Accelerator result pass-through
     // Control signals out
     output reg         reg_write_out,
     output reg  [1:0]  mem_to_reg_out,
     // Data out
     output reg  [31:0] mem_data_out,
     output reg  [31:0] alu_result_out,
-    output reg  [4:0]  rd_addr_out,
-    output reg  [31:0] accel_result_out
+    output reg  [4:0]  rd_addr_out
 );
 
     always @(posedge clk or posedge reset) begin
@@ -33,14 +31,12 @@ module pipeline_register_mem_wb (
             mem_data_out     <= 32'd0;
             alu_result_out   <= 32'd0;
             rd_addr_out      <= 5'd0;
-            accel_result_out <= 32'd0;
         end else begin
             reg_write_out    <= reg_write_in;
             mem_to_reg_out   <= mem_to_reg_in;
             mem_data_out     <= mem_data_in;
             alu_result_out   <= alu_result_in;
             rd_addr_out      <= rd_addr_in;
-            accel_result_out <= accel_result_in;
         end
     end
 

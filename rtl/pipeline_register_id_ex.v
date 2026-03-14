@@ -17,7 +17,6 @@ module pipeline_register_id_ex (
     input  wire        mem_read_in,
     input  wire        mem_write_in,
     input  wire [1:0]  mem_to_reg_in,
-    input  wire        accel_start_in,
     // Data in
     input  wire [31:0] pc_in,
     input  wire [31:0] rs1_data_in,
@@ -33,7 +32,6 @@ module pipeline_register_id_ex (
     output reg         mem_read_out,
     output reg         mem_write_out,
     output reg  [1:0]  mem_to_reg_out,
-    output reg         accel_start_out,
     // Data out
     output reg  [31:0] pc_out,
     output reg  [31:0] rs1_data_out,
@@ -53,7 +51,6 @@ module pipeline_register_id_ex (
             mem_read_out    <= 1'b0;
             mem_write_out   <= 1'b0;
             mem_to_reg_out  <= 2'b00;
-            accel_start_out <= 1'b0;
             pc_out          <= 32'd0;
             rs1_data_out    <= 32'd0;
             rs2_data_out    <= 32'd0;
@@ -69,7 +66,6 @@ module pipeline_register_id_ex (
             mem_read_out    <= 1'b0;
             mem_write_out   <= 1'b0;
             mem_to_reg_out  <= 2'b00;
-            accel_start_out <= 1'b0;
             pc_out          <= 32'd0;
             rs1_data_out    <= 32'd0;
             rs2_data_out    <= 32'd0;
@@ -84,7 +80,6 @@ module pipeline_register_id_ex (
             mem_read_out    <= mem_read_in;
             mem_write_out   <= mem_write_in;
             mem_to_reg_out  <= mem_to_reg_in;
-            accel_start_out <= accel_start_in;
             pc_out          <= pc_in;
             rs1_data_out    <= rs1_data_in;
             rs2_data_out    <= rs2_data_in;

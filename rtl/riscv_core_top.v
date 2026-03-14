@@ -48,7 +48,6 @@ module riscv_core_top (
     wire        id_mem_read;
     wire        id_mem_write;
     wire [1:0]  id_mem_to_reg;
-    wire        id_accel_start;
 
     // ---- ID/EX Pipeline Register outputs ----
     wire        idex_reg_write;
@@ -57,7 +56,6 @@ module riscv_core_top (
     wire        idex_mem_read;
     wire        idex_mem_write;
     wire [1:0]  idex_mem_to_reg;
-    wire        idex_accel_start;
     wire [31:0] idex_pc;
     wire [31:0] idex_rs1_data;
     wire [31:0] idex_rs2_data;
@@ -73,11 +71,6 @@ module riscv_core_top (
     wire [31:0] ex_forwarded_rs1;
     wire [31:0] ex_forwarded_rs2;
 
-    // Accelerator signals
-    wire        accel_done;
-    wire        accel_busy;
-    wire [31:0] accel_result;
-
     // ---- EX/MEM Pipeline Register outputs ----
     wire        exmem_reg_write;
     wire        exmem_mem_read;
@@ -86,7 +79,6 @@ module riscv_core_top (
     wire [31:0] exmem_alu_result;
     wire [31:0] exmem_rs2_data;
     wire [4:0]  exmem_rd_addr;
-    wire [31:0] exmem_accel_result;
 
     // ---- MEM Stage ----
     wire [31:0] mem_read_data;
@@ -97,7 +89,6 @@ module riscv_core_top (
     wire [31:0] memwb_mem_data;
     wire [31:0] memwb_alu_result;
     wire [4:0]  memwb_rd_addr;
-    wire [31:0] memwb_accel_result;
 
     // ---- WB Stage ----
     reg  [31:0] wb_write_data;
@@ -106,7 +97,6 @@ module riscv_core_top (
     wire        stall;
     wire        id_flush;
     wire        load_use_stall;
-    wire        accel_stall;
 
     //==========================================================================
     // Instruction Field Extraction (ID Stage)
@@ -123,16 +113,14 @@ module riscv_core_top (
 
     // Stall on load-use hazard: if the instruction in EX stage is a load
     // and the destination register matches a source in ID stage
-    // Stall on load-use hazard OR accelerator busy
+    // Stall on load-use hazard
     assign load_use_stall = idex_mem_read &&
                    ((idex_rd_addr == id_rs1_addr) || (idex_rd_addr == id_rs2_addr)) &&
                    (idex_rd_addr != 5'd0);
-    assign accel_stall = accel_busy;
-    assign stall = load_use_stall || accel_stall;
+    assign stall = load_use_stall;
 
     // Only flush ID/EX on load-use stall (insert bubble)
-    // Don't flush on accelerator stall (keep custom instruction in ID/EX)
-    assign id_flush = load_use_stall && !accel_stall;
+    assign id_flush = load_use_stall;
 
     //==========================================================================
     // Data Forwarding Unit
@@ -194,8 +182,7 @@ module riscv_core_top (
         .alu_ctrl    (id_alu_ctrl),
         .mem_read    (id_mem_read),
         .mem_write   (id_mem_write),
-        .mem_to_reg  (id_mem_to_reg),
-        .accel_start (id_accel_start)
+        .mem_to_reg  (id_mem_to_reg)
     );
 
     register_file u_regfile (
@@ -216,7 +203,7 @@ module riscv_core_top (
     pipeline_register_id_ex u_idex (
         .clk             (clk),
         .reset           (reset),
-        .stall           (accel_stall),
+        .stall           (1'b0),
         .flush           (id_flush),
         // Control in
         .reg_write_in    (id_reg_write),
@@ -225,7 +212,6 @@ module riscv_core_top (
         .mem_read_in     (id_mem_read),
         .mem_write_in    (id_mem_write),
         .mem_to_reg_in   (id_mem_to_reg),
-        .accel_start_in  (id_accel_start),
         // Data in
         .pc_in           (ifid_pc),
         .rs1_data_in     (id_rs1_data),
@@ -241,7 +227,6 @@ module riscv_core_top (
         .mem_read_out    (idex_mem_read),
         .mem_write_out   (idex_mem_write),
         .mem_to_reg_out  (idex_mem_to_reg),
-        .accel_start_out (idex_accel_start),
         // Data out
         .pc_out          (idex_pc),
         .rs1_data_out    (idex_rs1_data),
@@ -267,23 +252,13 @@ module riscv_core_top (
         .zero_flag  (ex_zero_flag)
     );
 
-    // Convolution Accelerator
-    convolution_accelerator u_conv_accel (
-        .clk    (clk),
-        .reset  (reset),
-        .start  (idex_accel_start),
-        .done   (accel_done),
-        .busy   (accel_busy),
-        .result (accel_result)
-    );
-
     //==========================================================================
     // Pipeline Register: EX/MEM
     //==========================================================================
     pipeline_register_ex_mem u_exmem (
         .clk              (clk),
         .reset            (reset),
-        .stall            (accel_stall),
+        .stall            (1'b0),
         // Control in
         .reg_write_in     (idex_reg_write),
         .mem_read_in      (idex_mem_read),
@@ -293,7 +268,6 @@ module riscv_core_top (
         .alu_result_in    (ex_alu_result),
         .rs2_data_in      (ex_forwarded_rs2),
         .rd_addr_in       (idex_rd_addr),
-        .accel_result_in  (accel_result),
         // Control out
         .reg_write_out    (exmem_reg_write),
         .mem_read_out     (exmem_mem_read),
@@ -302,25 +276,46 @@ module riscv_core_top (
         // Data out
         .alu_result_out   (exmem_alu_result),
         .rs2_data_out     (exmem_rs2_data),
-        .rd_addr_out      (exmem_rd_addr),
-        .accel_result_out (exmem_accel_result)
+        .rd_addr_out      (exmem_rd_addr)
     );
 
     //==========================================================================
     // Stage 4: Memory Access (MEM)
     //==========================================================================
-    // Simple data memory (256 words)
+    // Simple data memory (256 words, addresses 0x0000 - 0x03FC)
     reg [31:0] data_memory [0:255];
 
-    // Memory read
-    assign mem_read_data = exmem_mem_read ? data_memory[exmem_alu_result[9:2]] : 32'd0;
+    // Address Decoding
+    wire is_cnn_addr  = (exmem_alu_result >= 32'h0000_1000) && (exmem_alu_result < 32'h0000_2000);
+    wire is_dmem_addr = (exmem_alu_result <  32'h0000_0400);
 
-    // Memory write
+    wire [31:0] dmem_read_data = (exmem_mem_read && is_dmem_addr) ? data_memory[exmem_alu_result[9:2]] : 32'd0;
+    wire [31:0] cnn_read_data;
+    
+    // Memory read routing
+    assign mem_read_data = is_cnn_addr ? cnn_read_data : dmem_read_data;
+
+    // Memory write routing for Data Memory
     always @(posedge clk) begin
-        if (exmem_mem_write) begin
+        if (exmem_mem_write && is_dmem_addr) begin
             data_memory[exmem_alu_result[9:2]] <= exmem_rs2_data;
         end
     end
+
+    //==========================================================================
+    // Memory-Mapped CNN Accelerator Integration
+    //==========================================================================
+    wire cnn_done;
+
+    edge_ai_cnn_top u_cnn_accel (
+        .clk(clk),
+        .rst_n(~reset),
+        .bus_we(exmem_mem_write && is_cnn_addr),
+        .bus_addr(exmem_alu_result - 32'h0000_1000), // Normalize to 0x00 offset
+        .bus_din(exmem_rs2_data),
+        .bus_dout(cnn_read_data),
+        .cnn_done(cnn_done)
+    );
 
     //==========================================================================
     // Pipeline Register: MEM/WB
@@ -335,15 +330,13 @@ module riscv_core_top (
         .mem_data_in      (mem_read_data),
         .alu_result_in    (exmem_alu_result),
         .rd_addr_in       (exmem_rd_addr),
-        .accel_result_in  (exmem_accel_result),
         // Control out
         .reg_write_out    (memwb_reg_write),
         .mem_to_reg_out   (memwb_mem_to_reg),
         // Data out
         .mem_data_out     (memwb_mem_data),
         .alu_result_out   (memwb_alu_result),
-        .rd_addr_out      (memwb_rd_addr),
-        .accel_result_out (memwb_accel_result)
+        .rd_addr_out      (memwb_rd_addr)
     );
 
     //==========================================================================
@@ -353,7 +346,6 @@ module riscv_core_top (
         case (memwb_mem_to_reg)
             2'b00:   wb_write_data = memwb_alu_result;    // From ALU
             2'b01:   wb_write_data = memwb_mem_data;      // From memory
-            2'b10:   wb_write_data = memwb_accel_result;  // From accelerator
             default: wb_write_data = memwb_alu_result;
         endcase
     end

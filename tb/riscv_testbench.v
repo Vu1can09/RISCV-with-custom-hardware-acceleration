@@ -56,8 +56,8 @@ module riscv_testbench;
         $display("TIME=%0t | Reset released, starting execution...", $time);
         $display("");
 
-        // Run for enough cycles (program + accelerator stall + drain)
-        #800;
+        // Run for enough cycles (program + memory mapped delay loops + drain)
+        #3000;
 
         $display("");
         $display("==========================================================");
@@ -73,7 +73,8 @@ module riscv_testbench;
         $display(" x8  = 0x%08h  (%0d)", u_dut.u_regfile.registers[8],  u_dut.u_regfile.registers[8]);
         $display(" x9  = 0x%08h  (%0d)", u_dut.u_regfile.registers[9],  u_dut.u_regfile.registers[9]);
         $display(" x10 = 0x%08h  (%0d)", u_dut.u_regfile.registers[10], u_dut.u_regfile.registers[10]);
-        $display(" x11 = 0x%08h  (%0d)", u_dut.u_regfile.registers[11], u_dut.u_regfile.registers[11]);
+        $display(" x13 = 0x%08h  (CNN immediate poll flag)", u_dut.u_regfile.registers[13]);
+        $display(" x14 = 0x%08h  (CNN delayed poll flag)  ", u_dut.u_regfile.registers[14]);
 
         $display("");
         $display("==========================================================");
@@ -170,19 +171,27 @@ module riscv_testbench;
             fail_count = fail_count + 1;
         end
 
-        // x11 = CONV => 109 (0x6D)
-        // Kernel [[2,1,3],[1,4,1],[3,1,2]] * Input [[5,3,7],[2,8,4],[6,1,9]]
-        if (u_dut.u_regfile.registers[11] == 32'h0000006D) begin
-            $display(" [PASS] x11 = 109 (CONV accelerator) [kernel*input = 0x6D]");
+        // x13 was polled immediately after SW START
+        if (u_dut.u_regfile.registers[13] == 32'd0) begin
+            $display(" [PASS] x13 = 0   (CNN Poll immediately returns 0 indicating busy)");
             pass_count = pass_count + 1;
         end else begin
-            $display(" [FAIL] x11 = 0x%08h / %0d (expected 109 / 0x6D)", u_dut.u_regfile.registers[11], u_dut.u_regfile.registers[11]);
+            $display(" [FAIL] x13 = %0d (expected CNN initially busy flag 0)", u_dut.u_regfile.registers[13]);
+            fail_count = fail_count + 1;
+        end
+        
+        // x14 was polled after ~50 NOP cycles
+        if (u_dut.u_regfile.registers[14] == 32'd1) begin
+            $display(" [PASS] x14 = 1   (CNN Poll after delay returns 1 indicating DONE)");
+            pass_count = pass_count + 1;
+        end else begin
+            $display(" [FAIL] x14 = %0d (expected CNN completed flag 1)", u_dut.u_regfile.registers[14]);
             fail_count = fail_count + 1;
         end
 
         $display("");
         $display("==========================================================");
-        $display(" Results: %0d PASSED, %0d FAILED out of 11 tests", pass_count, fail_count);
+        $display(" Results: %0d PASSED, %0d FAILED out of 12 tests", pass_count, fail_count);
         $display("==========================================================");
 
         if (fail_count == 0)
