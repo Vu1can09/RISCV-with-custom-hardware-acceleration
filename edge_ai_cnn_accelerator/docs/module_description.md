@@ -1,6 +1,15 @@
 # Module Description
 
 ## Basic Datapath
+
+```mermaid
+flowchart LR
+    A[Pixel 0..8] --> M1((x))
+    W[Weight 0..8] --> M1
+    M1 --> AddTree[Adder Tree]
+    AddTree --> Sum[MAC Output]
+```
+
 1. **`mac_array.v`**: The core math unit. It implements 9 pipelined multipliers computing `a[i] * w[i]` followed by an adder tree accumulating them into a single product. 
 2. **`line_buffer.v`**: Dual configurable length FIFOs maintaining historical row vectors to construct 2D spatial context.
 3. **`sliding_window.v`**: Receives 3 column vectors every clock, shifts previous variables right, and exposes a flattened vector of 9 simultaneous spatial variables to the MAC Array.

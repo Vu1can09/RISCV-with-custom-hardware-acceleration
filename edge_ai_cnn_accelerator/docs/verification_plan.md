@@ -1,7 +1,8 @@
 # Verification Plan
 
 ## Overview
-The verification logic ensures mathematical correctness before synthesizing the datapath. The environment utilizes standard Verilog testbenches. Python serves as the behavioral ground-truth generator.
+The verification logic ensures mathematical correctness before synthesizing the datapath. The environment utilizes standard Verilog testbenches compiled using Icarus Verilog (`iverilog`).
+An automated script (`scripts/run_simulation.sh`) drives the compilation and simulation processes, generating highly compressed `.fst` waveforms. Python serves as the behavioral ground-truth generator.
 
 ### 1. Module-Level Verification
 - **MAC Array (`mac_array_tb.v`)**: Tests combinational multiply-accumulate arithmetic logic on 3x3 sliding windows. Ensures no overflow and correct bit-widths.
