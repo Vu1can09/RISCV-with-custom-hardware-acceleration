@@ -1,175 +1,125 @@
-# 🖥️ RISC-V RV32I Processor with custom Edge AI CNN Accelerator
+# 🚀 RISC-V RV32I Processor & Custom Edge AI CNN Accelerator
 
-A complete, from-scratch **RISC-V RV32I 5-stage pipelined processor** combined with a custom **Processor-Controlled CNN Accelerator** for edge AI applications.
+A complete, from-scratch **RISC-V RV32I Pipelined Processor** combined with a custom **Memory-Mapped CNN Hardware Accelerator** for Edge AI applications.
 
-> **Mini Project** — Designed to be a learning resource for students exploring processor architecture, hardware acceleration, and FPGA implementation flows.
-
----
-
-## ✨ What This Project Demonstrates
-
-1. **RISC-V microarchitecture design** — classic 5-stage pipeline (IF → ID → EX → MEM → WB).
-2. **Custom Hardware Acceleration** — MMIO-controlled 3D Convolution engine supporting LeNet-style inference.
-3. **Pipeline hazard handling** — data forwarding + load-use stall detection.
-4. **Full RTL & Python Verification workflow** — Icarus Verilog, GTKWave, and mathematical regression modeling via NumPy.
+> **Educational Mini Project** — Designed to be a highly accessible learning resource for electronics, computer engineering, and computer science students exploring processor architecture, hardware acceleration, and FPGA design flows.
 
 ---
 
-## 📐 Architecture
+## 📖 What is this project?
 
-### Top-Level Integration
+This repository bridges the gap between software instructions (RISC-V Assembly) and dedicated silicon hardware (Verilog). 
 
-The system centers around the RISC-V Controller dispatching configuration and execution commands to the Edge AI subsystem via Memory-Mapped IO.
+Instead of doing all the heavy lifting in software, the RISC-V processor acts as the "Brain" and offloads the intense math of Artificial Intelligence (AI) to a custom-designed **Convolutional Neural Network (CNN) Accelerator**!
 
-```text
-                Input Image
-                     │
-                     ▼
-                Image Buffer
-                     │
-                     ▼
-                 RISC-V Core
-           (CNN Controller / Brain)
-                     │
-           Control + Configuration
-                     │
-        ┌────────────┼────────────┐
-        ▼            ▼            ▼
+### 🧠 Why Hardware Acceleration for CNNs?
+CNNs are the backbone of modern AI image recognition (like autonomous driving or face ID). However, running them on a standard CPU is slow because CPUs compute math sequentially. 
 
-   Conv3D Layer1  Conv3D Layer2  Conv3D Layer3
-        │            │            │
-        ▼            ▼            ▼
-
-     FeatureMap1  FeatureMap2  FeatureMap3
-                     │
-                     ▼
-              Fully Connected
-                     │
-                     ▼
-                Classification
-```
-
-### Supported RISC-V Instructions
-
-| Type     | Instruction | Description                                  |
-|----------|-------------|----------------------------------------------|
-| I-type   | `ADDI`      | Add immediate                                |
-| R-type   | `ADD`       | Register addition                            |
-| R-type   | `SUB`       | Register subtraction                         |
-| R-type   | `AND`       | Bitwise AND                                  |
-| R-type   | `OR`        | Bitwise OR                                   |
+By designing a **Hardware Accelerator**, we can utilize hundreds of parallel multipliers (a MAC Array) to compute an entire 3x3 window of image pixels simultaneously, drastically reducing the clock cycles needed for AI inference.
 
 ---
 
-## 📁 Project Structure
+## 📐 System Architecture
+
+### 1. Top-Level Integration
+The system centers around the RISC-V Controller dispatching configuration and execution commands to the Edge AI subsystem via a Memory-Mapped I/O (MMIO) bus.
+
+![Edge AI System Flowchart](diagrams/system_flowchart.png)
+
+### 2. CNN Datapath (How the Accelerator Works)
+Once the RISC-V core triggers the accelerator, pixels stream from the internal SRAM into the computation pipeline.
+
+![CNN Datapath Architecture](diagrams/pipeline_datapath_diagram.png)
+
+1. **Line Buffers:** Store rows of the image to create a 2D spatial view.
+2. **Sliding Window:** Automatically shifts a 3x3 frame across the image.
+3. **MAC Array (Multiply-Accumulate):** 9 Parallel multipliers compute the convolution math instantly.
+4. **Channel Accumulator:** Adds up the depths of 3D tensors (like RGB channels) before writing the final result back to memory.
+
+---
+
+## 📁 Repository Structure
 
 ```text
 .
 ├── rtl/                              # Core RISC-V Pipeline Modules
-├── sim/                              # Core RISC-V simulation collateral
-├── tb/                               # Core RISC-V and Top-level integration testbenches
-├── docs/                             # Core RISC-V design methodology
-├── edge_ai_cnn_accelerator/          # Dedicated CNN Accelerator Subsystem
-│   ├── rtl/                          # 3D Convolution Datapath and Controllers
-│   ├── tb/                           # CNN Component testbenches
-│   ├── scripts/                      # Regression testing pipelines
-│   ├── python_reference/             # Mathematical verification ground truths
-│   └── docs/                         # Detailed Accelerator Architecture
+├── edge_ai_cnn_accelerator/          # Dedicated CNN Accelerator Project
+│   ├── rtl/                          # 3D Convolution Datapath (Verilog)
+│   ├── tb/                           # Individual component testbenches
+│   ├── scripts/                      # Automated simulation & testing scripts
+│   ├── python_reference/             # Mathematical ground truths (NumPy)
+│   └── docs/                         # Detailed Architecture Documentation
+├── diagrams/                         # High-res block diagrams
+└── sim/                              # CPU simulation collateral
 ```
 
 ---
 
-## 🚀 Quick Start (CNN Accelerator Environment)
+## 🚀 Quick Start Guide
+
+We have set up a fully automated simulation environment so you can see the hardware in action without an actual FPGA board!
 
 ### Prerequisites
+You need a Verilog simulator and a waveform viewer.
+* **Mac Users:** `brew install icarus-verilog` and `brew install --HEAD randomplum/gtkwave/gtkwave`
+* **Linux Users:** `sudo apt install iverilog gtkwave`
+* **Python:** `pip3 install numpy`
 
-| Tool             | Install Command                              |
-|------------------|----------------------------------------------|
-| **Icarus Verilog** | `brew install icarus-verilog`              |
-| **GTKWave 4.x**   | `brew install --HEAD randomplum/gtkwave/gtkwave` |
-| **Python 3 + NumPy** | `pip3 install numpy`                     |
-
-> **Note for macOS users:** The old GTKWave cask (3.3.107) is incompatible with macOS 14+. Use the `randomplum/gtkwave` tap shown above.
-
-### 1. Clone & Simulate
+### 1. Run the Hardware Simulation
+Our custom batch script automatically compiles the Verilog code, runs the testbenches, and generates ultra-compressed `.fst` waveform files.
 
 ```bash
 git clone https://github.com/Vu1can09/RISCV-with-custom-hardware-acceleration.git
-cd RISCV-with-custom-hardware-acceleration
+cd RISCV-with-custom-hardware-acceleration/edge_ai_cnn_accelerator
 
-# Run complete CNN verification pipeline
-cd edge_ai_cnn_accelerator/scripts
-./regression_test.sh
+# Run the complete top-level System Integration Test
+./scripts/run_simulation.sh system_integration_tb
+```
+If successful, the terminal will print `PASS: System integration test complete. CNN asserted done.`
+
+### 2. View the Signals in GTKWave
+You can visually inspect the electrical signals, clock ticks, and data pipelines!
+```bash
+gtkwave sim_out/waveforms/system.fst
 ```
 
-You should see regression output indicating `PASS` for components such as the **MAC Array**, **Conv3D Pipeline**, and **RISC-V Integrations**.
-
-### 2. Verify against mathematical truths
+### 3. Verify Against Python Ground Truth
+Want to prove the hardware math is correct? Run our Python model to see the exact arrays the hardware is computing:
 ```bash
-cd edge_ai_cnn_accelerator
 python3 python_reference/cnn_reference_model.py
 ```
-Outputs the standard convolution validation arrays matching the expected sums computed in `tb/conv3d_accelerator_tb.v`.
 
 ---
 
-## 🔍 How It Works: CNN Hardware Accelerator
+## 🔍 Module Breakdown (For Students)
 
-### MMIO Interfaces
+If you are reading the Verilog code, start here to understand the hierarchy:
 
-The RISC-V writes parameters like `INPUT_WIDTH`, `INPUT_HEIGHT`, and `CHANNELS` through a dedicated memory-mapped interface. Once initialized, the firmware pulses the `START` register to trigger computation.
+1. **`edge_ai_cnn_top.v`**: The absolute top of the design. Connects the processor to the CNN.
+2. **`cnn_controller.v`**: The "Traffic Cop". A Finite State Machine (FSM) that dictates when to load memory, when to compute, and when to write back based on the `START` signal.
+3. **`conv3d_accelerator.v`**: The computation wrapper. This holds the Line Buffers, Sliding Window, and MAC array.
+4. **`mac_array.v`**: The raw mathematics. Nine `*` (multipliers) and a tree of `+` (adders).
 
-### Complete RTL Modules Breakdown
-
-The hardware is modularized into specialized functional block designs, all written in synthesizable Verilog:
-
-1. **`mac_array.v`**: The core math unit. Implements 9 pipelined multipliers computing `a[i] * w[i]` followed by an adder tree accumulating them into a single 20-bit product.
-2. **`line_buffer.v`**: Utilizes dual FIFOs maintaining historical row vectors to construct 2D spatial context dynamically across varying image widths.
-3. **`sliding_window.v`**: Receives 3 column vectors every clock, shifts previous variables right, and exposes a flattened vector of 9 simultaneous spatial variables to the MAC Array.
-4. **`channel_accumulator.v`**: Maintains a running tally of intermediate MAC array outputs. It asserts `clear` at the completion of spatial tensor boundaries.
-5. **`conv3d_accelerator.v`**: The structural wrapper organizing the line buffers, sliding windows, and MAC units into a single cohesive data stream.
-6. **`cnn_controller.v`**: A Moore Finite State Machine (FSM) spanning `IDLE` -> `LOAD_WINDOW` -> `MULTIPLY` -> `ACCUMULATE` -> `WRITE_OUTPUT`. It coordinates memory read requests and enables accelerator modules.
-7. **`cnn_register_interface.v`**: An adaptable MMIO address map exposing software configurations (`input_width`, `channels`, etc.) to the CNN Controller hardware.
-8. **`riscv_core_controller.v`**: A soft-core module driving a predefined instruction sequence mimicking firmware execution. 
-9. **`edge_ai_cnn_top.v`**: The primary integration wrapper tying the RISC-V controller to the CNN datapath.
-
-### Verification Environment (Testbenches)
-
-A multi-tiered testbench setup systematically proves correctness mapping from fundamental arithmetic up to full system integration:
-
-1. **`mac_array_tb.v`**: Tests combinational multiply-accumulate arithmetic logic on 3x3 sliding windows, pushing constant values and complex vectors to ensure no overflow and correct bit-width mapping.
-2. **`sliding_window_tb.v`**: Isolates the vector generation logic, feeding rows of pixels and monitoring the resulting flattened 3x3 window vector outputs across clock cycles.
-3. **`conv3d_accelerator_tb.v`**: Validates the sequential streaming logic, packing sliding windows, utilizing the MAC, and tracking internal channel accumulator loops.
-4. **`cnn_controller_tb.v`**: Tracks FSM transition validity across control signal boundaries ensuring correct state tracking.
-5. **`riscv_control_tb.v`**: Examines hardware/software boundary, making sure register writes target correct memory map addresses over the system bus.
-6. **`system_integration_tb.v`**: The capstone integration test running the instantiated RISC-V controller orchestrating the full sub-pipeline until a theoretical `DONE` interrupt flag pulses.
-
-### Verification against mathematical truths
-The testbenches mirror expected results tracked in pure python.
+Every major module has its own dedicated testbench in the `tb/` folder (e.g., `mac_array_tb.v`). You can simulate any of them individually:
 ```bash
-cd edge_ai_cnn_accelerator
-python3 python_reference/cnn_reference_model.py
+./scripts/run_simulation.sh mac_array_tb
 ```
-This Python script runs a generic 3D N-channel mathematical convolution loop locally using NumPy to cross-validate convolution constants with RTL outputs.
 
 ---
 
-## 📚 Further Reading
+## 📚 Further Reading & Documentation
 
-Looking to synthesize? Check out the specific detailed FPGA strategies in `edge_ai_cnn_accelerator/docs/fpga_implementation.md`.
-
-- [RISC-V ISA Specification](https://riscv.org/technical/specifications/)
-- [Patterson & Hennessy — Computer Organization and Design (RISC-V Edition)](https://www.elsevier.com/books/computer-organization-and-design-risc-v-edition/patterson/978-0-12-820331-6)
-- [Icarus Verilog Documentation](https://steveicarus.github.io/iverilog/)
+Dive deeper into the engineering specifications:
+1. [Detailed Module Architecture](edge_ai_cnn_accelerator/docs/architecture.md)
+2. [CNN Datapath Descriptions](edge_ai_cnn_accelerator/docs/module_description.md)
+3. [Verification & Testing Plan](edge_ai_cnn_accelerator/docs/verification_plan.md)
+4. [FPGA Synthesizability Guidelines](edge_ai_cnn_accelerator/docs/fpga_implementation.md)
 
 ---
 
 ## 📄 License
-
-This project is open-source and available for educational purposes.
-
----
+This project is open-source and intended to foster learning in open hardware, RISC-V, and Edge AI.
 
 <p align="center">
-  Built with 🥀 for learning RISC-V and Edge AI architecture
+  <i>Built to bridge the gap between Software AI and Hardware Silicon.</i>
 </p>
