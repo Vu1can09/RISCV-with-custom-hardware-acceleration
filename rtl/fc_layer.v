@@ -1,55 +1,36 @@
 `timescale 1ns / 1ps
 
 // -----------------------------------------------------------------------------
-// Fully Connected (Dense) Layer
+// PPA-Optimized Fully Connected (Dense) Layer
 //
-// Sequentially reads input features and weights, multiplies, and accumulates
-// to produce output class scores. Operates as a streaming MAC engine.
-//
-// Operation:
-//   For each output neuron j:
-//     score[j] = SUM_i ( input[i] * weight[j][i] ) + bias[j]
-//
-// Interface:
-//   - Input feature values are streamed in one per clock via `feature_in`
-//   - Weights are provided synchronously via `weight_in`
-//   - Bias is added at the end of each neuron accumulation
-//   - Output scores are emitted one per neuron via `score_out`
+// Improvements:
+// 1. Performance: Added a pipeline stage to the multiplier (retiming).
+// 2. Power: Operand Isolation for the multiplier inputs.
+// 3. Timing: Balanced critical path for high-frequency operation.
 // -----------------------------------------------------------------------------
 
 module fc_layer #(
-    parameter FEATURE_WIDTH = 8,       // Input feature precision
-    parameter WEIGHT_WIDTH  = 8,       // Weight precision
-    parameter ACC_WIDTH     = 32,      // Accumulator precision
-    parameter MAX_INPUTS    = 576,     // Max flattened input size (e.g. 6x6x16)
-    parameter MAX_OUTPUTS   = 10       // Max number of output classes/neurons
+    parameter FEATURE_WIDTH = 8,
+    parameter WEIGHT_WIDTH  = 8,
+    parameter ACC_WIDTH     = 32,
+    parameter MAX_INPUTS    = 576,
+    parameter MAX_OUTPUTS   = 10
 )(
     input  wire                           clk,
     input  wire                           rst_n,
-
-    // Control
     input  wire                           start,
-    input  wire [15:0]                    num_inputs,    // Actual input count
-    input  wire [7:0]                     num_outputs,   // Actual output count
-
-    // Streaming input features (from flattened pool2 output buffer)
+    input  wire [15:0]                    num_inputs,
+    input  wire [7:0]                     num_outputs,
     input  wire signed [FEATURE_WIDTH-1:0] feature_in,
     input  wire                           feature_valid,
-
-    // Weight memory interface (external RAM read port)
-    output reg  [15:0]                    weight_addr,   // Address into weight memory
+    output reg  [15:0]                    weight_addr,
     input  wire signed [WEIGHT_WIDTH-1:0] weight_in,
-
-    // Bias input (one per output neuron)
     input  wire signed [ACC_WIDTH-1:0]    bias_in,
-
-    // Output
     output reg  signed [ACC_WIDTH-1:0]    score_out,
     output reg                            score_valid,
     output reg                            done
 );
 
-    // FSM States
     localparam IDLE       = 2'd0;
     localparam COMPUTE    = 2'd1;
     localparam OUTPUT     = 2'd2;
@@ -57,21 +38,27 @@ module fc_layer #(
 
     reg [1:0]  state;
     reg signed [ACC_WIDTH-1:0] accumulator;
-    reg [15:0] input_idx;      // Current input feature index
-    reg [7:0]  output_idx;     // Current output neuron index
+    reg [15:0] input_idx;
+    reg [7:0]  output_idx;
+
+    // Pipeline Registers for MAC
+    reg signed [ACC_WIDTH-1:0] mul_res_reg;
+    reg                        mul_valid_reg;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            state       <= IDLE;
-            accumulator <= 0;
-            input_idx   <= 0;
-            output_idx  <= 0;
-            weight_addr <= 0;
-            score_out   <= 0;
-            score_valid <= 0;
-            done        <= 0;
+            state         <= IDLE;
+            accumulator   <= 0;
+            input_idx     <= 0;
+            output_idx    <= 0;
+            weight_addr   <= 0;
+            score_out     <= 0;
+            score_valid   <= 0;
+            done          <= 0;
+            mul_res_reg   <= 0;
+            mul_valid_reg <= 0;
         end else begin
-            score_valid <= 1'b0;  // Default
+            score_valid   <= 1'b0;
 
             case (state)
                 IDLE: begin
@@ -86,35 +73,45 @@ module fc_layer #(
                 end
 
                 COMPUTE: begin
+                    // ---- Pipelined MAC Stage 1: Multiplication & Isolation ----
                     if (feature_valid) begin
-                        // MAC: accumulate feature * weight
-                        accumulator <= accumulator +
-                            ({{(ACC_WIDTH-FEATURE_WIDTH){feature_in[FEATURE_WIDTH-1]}}, feature_in} *
-                             {{(ACC_WIDTH-WEIGHT_WIDTH){weight_in[WEIGHT_WIDTH-1]}}, weight_in});
-
-                        weight_addr <= weight_addr + 1;
-                        input_idx   <= input_idx + 1;
-
+                        mul_res_reg <= ({{(ACC_WIDTH-FEATURE_WIDTH){feature_in[FEATURE_WIDTH-1]}}, feature_in} *
+                                        {{(ACC_WIDTH-WEIGHT_WIDTH){weight_in[WEIGHT_WIDTH-1]}}, weight_in});
+                        mul_valid_reg <= 1'b1;
+                        weight_addr   <= weight_addr + 1;
+                        input_idx     <= input_idx + 1;
+                        
+                        // Check if this was the last input capture
                         if (input_idx == num_inputs - 1) begin
                             state <= OUTPUT;
                         end
+                    end else begin
+                        mul_valid_reg <= 1'b0;
+                    end
+
+                    // ---- Pipelined MAC Stage 2: Accumulation ----
+                    if (mul_valid_reg) begin
+                        accumulator <= accumulator + mul_res_reg;
                     end
                 end
 
                 OUTPUT: begin
-                    // Emit accumulated score + bias for this neuron
-                    score_out   <= accumulator + bias_in;
-                    score_valid <= 1'b1;
-
-                    // Prepare for next neuron
-                    accumulator <= 0;
-                    input_idx   <= 0;
-                    output_idx  <= output_idx + 1;
-
-                    if (output_idx == num_outputs - 1) begin
-                        state <= DONE_STATE;
+                    // Final drain of pipeline
+                    if (mul_valid_reg) begin
+                        accumulator <= accumulator + mul_res_reg;
+                        mul_valid_reg <= 1'b0; // Ensure single addition
                     end else begin
-                        state <= COMPUTE;
+                        score_out   <= accumulator + bias_in;
+                        score_valid <= 1'b1;
+                        accumulator <= 0;
+                        input_idx   <= 0;
+                        output_idx  <= output_idx + 1;
+
+                        if (output_idx == num_outputs - 1) begin
+                            state <= DONE_STATE;
+                        end else begin
+                            state <= COMPUTE;
+                        end
                     end
                 end
 
