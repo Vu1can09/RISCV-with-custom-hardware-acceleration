@@ -1,16 +1,13 @@
 `timescale 1ns / 1ps
 
 // -----------------------------------------------------------------------------
-// Activation LUT — Sigmoid & Softmax Approximation
+// Activation LUT — Sigmoid Approximation (Fully Synthesizable)
 //
-// Uses a 256-entry lookup table for sigmoid approximation on INT8 inputs.
-// For softmax, the output is e^x approximated through the same LUT followed
-// by normalization (division by sum).
+// Piecewise-linear sigmoid approximation implemented as pure combinational
+// logic. No initial blocks — ASIC/FPGA synthesis safe.
 //
-// Sigmoid(x) ≈ LUT[x + 128] where x ∈ [-128, 127] maps to [0, 255]
-//
-// The LUT is pre-initialized with the sigmoid curve scaled to 8-bit output.
-// For ASIC synthesis, the LUT will be inferred as a small ROM.
+// Sigmoid(x) ≈ piecewise_linear(x + 128) for x ∈ [-128, 127]
+// Output range: [0, 255] (8-bit unsigned)
 // -----------------------------------------------------------------------------
 
 module activation_lut #(
@@ -20,7 +17,7 @@ module activation_lut #(
     input  wire                          clk,
     input  wire                          rst_n,
 
-    // Mode select: 0 = sigmoid, 1 = pass-through (for softmax normalization stage)
+    // Mode: 0 = sigmoid, 1 = pass-through
     input  wire                          mode,
 
     // Streaming input
@@ -32,35 +29,27 @@ module activation_lut #(
     output reg                           valid_out
 );
 
-    // 256-entry sigmoid LUT (pre-computed: sigmoid(x/32)*255 for x in [-128,127])
-    reg [OUT_WIDTH-1:0] sigmoid_lut [0:255];
+    // Synthesizable piecewise-linear sigmoid approximation
+    wire [7:0] unsigned_in;
+    assign unsigned_in = data_in + 8'd128;  // Shift [-128,127] → [0,255]
+    
+    reg [OUT_WIDTH-1:0] sigmoid_val;
 
-    // Initialize LUT with approximated sigmoid curve
-    integer k;
-    initial begin
-        for (k = 0; k < 256; k = k + 1) begin
-            // Piecewise linear approximation of sigmoid
-            if (k < 64)       sigmoid_lut[k] = 0;           // Deep negative → ~0
-            else if (k < 96)  sigmoid_lut[k] = (k - 64) * 2;   // Rising slope
-            else if (k < 128) sigmoid_lut[k] = 64 + (k - 96);  // Steeper
-            else if (k < 160) sigmoid_lut[k] = 128 + (k - 128); // Center
-            else if (k < 192) sigmoid_lut[k] = 192 + (k - 160) / 2; // Saturating
-            else              sigmoid_lut[k] = 255;          // Deep positive → ~1
-        end
+    always @(*) begin
+        if      (unsigned_in < 8'd64)  sigmoid_val = 8'd0;
+        else if (unsigned_in < 8'd96)  sigmoid_val = (unsigned_in - 8'd64) << 1;
+        else if (unsigned_in < 8'd128) sigmoid_val = 8'd64 + (unsigned_in - 8'd96);
+        else if (unsigned_in < 8'd160) sigmoid_val = 8'd128 + (unsigned_in - 8'd128);
+        else if (unsigned_in < 8'd192) sigmoid_val = 8'd192 + ((unsigned_in - 8'd160) >> 1);
+        else                           sigmoid_val = 8'd255;
     end
-
-    wire [7:0] lut_addr = data_in + 8'd128;  // Shift signed to unsigned index
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             data_out  <= 0;
             valid_out <= 0;
         end else if (valid_in) begin
-            if (mode == 1'b0) begin
-                data_out <= sigmoid_lut[lut_addr];
-            end else begin
-                data_out <= data_in[OUT_WIDTH-1:0]; // Pass-through
-            end
+            data_out  <= (mode == 1'b0) ? sigmoid_val : data_in[OUT_WIDTH-1:0];
             valid_out <= 1'b1;
         end else begin
             valid_out <= 1'b0;
