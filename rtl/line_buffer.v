@@ -2,13 +2,13 @@
 
 module line_buffer #(
     parameter DATA_WIDTH = 8,
-    parameter MAX_IMAGE_WIDTH = 128
+    parameter MAX_IMAGE_WIDTH = 2048
 )(
     input wire clk,
     input wire rst_n,
     input wire en,
     
-    input wire [7:0] image_width, // Dynamically configured width
+    input wire [15:0] image_width, // Dynamically configured width
     input wire [DATA_WIDTH-1:0] pixel_in,
     
     // Column outputs for 3x3 window: current row, row-1, row-2
@@ -23,7 +23,7 @@ module line_buffer #(
     reg [DATA_WIDTH-1:0] fifo_row1 [0:MAX_IMAGE_WIDTH-1];
     reg [DATA_WIDTH-1:0] fifo_row2 [0:MAX_IMAGE_WIDTH-1];
     
-    reg [6:0] wr_ptr;
+    reg [10:0] wr_ptr;
     
     reg [DATA_WIDTH-1:0] fifo1_out_q;
     reg [DATA_WIDTH-1:0] fifo2_out_q;
@@ -54,7 +54,7 @@ module line_buffer #(
             valid_out <= 1'b1;
             
             // Manage pointers
-            if ({1'b0, wr_ptr} == image_width - 8'd1) begin
+            if ({5'd0, wr_ptr} == image_width - 16'd1) begin
                 wr_ptr <= 0;
             end else begin
                 wr_ptr <= wr_ptr + 1;

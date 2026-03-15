@@ -6,8 +6,8 @@ module conv3d_accelerator (
     
     // Control interface from CNN Controller
     input wire start_conv,
-    input wire [7:0] img_width,
-    input wire [7:0] img_height,
+    input wire [15:0] img_width,
+    input wire [15:0] img_height,
     input wire [7:0] num_channels,
     
     // Data input
@@ -100,8 +100,8 @@ module conv3d_accelerator (
     
     // Logic for 'done' signal omitted for brevity; 
     // it would typically count generated output pixels and assert done when reaching width*height.
-    reg [15:0] out_pixel_count;
-    wire [15:0] total_pixels = img_width * img_height;
+    reg [31:0] out_pixel_count;
+    wire [31:0] total_pixels = img_width * img_height;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             out_pixel_count <= 0;

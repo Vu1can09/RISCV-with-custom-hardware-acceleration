@@ -16,8 +16,8 @@ module cnn_register_interface (
     output reg [31:0] image_addr,
     output reg [31:0] weight_addr,
     output reg [31:0] feature_addr,
-    output reg [7:0]  input_width,
-    output reg [7:0]  input_height,
+    output reg [15:0] input_width,
+    output reg [15:0] input_height,
     output reg [7:0]  channels,
     output reg [7:0]  kernel_size,
     output reg [7:0]  num_filters,
@@ -62,8 +62,8 @@ module cnn_register_interface (
                     8'h04: image_addr <= wdata;
                     8'h08: weight_addr <= wdata;
                     8'h0C: feature_addr <= wdata;
-                    8'h10: input_width <= wdata[7:0];
-                    8'h14: input_height <= wdata[7:0];
+                    8'h10: input_width <= wdata[15:0];
+                    8'h14: input_height <= wdata[15:0];
                     8'h18: channels <= wdata[7:0];
                     8'h1C: kernel_size <= wdata[7:0];
                     8'h20: num_filters <= wdata[7:0];
@@ -76,8 +76,8 @@ module cnn_register_interface (
                     8'h04: rdata <= image_addr;
                     8'h08: rdata <= weight_addr;
                     8'h0C: rdata <= feature_addr;
-                    8'h10: rdata <= {24'd0, input_width};
-                    8'h14: rdata <= {24'd0, input_height};
+                    8'h10: rdata <= {16'd0, input_width};
+                    8'h14: rdata <= {16'd0, input_height};
                     8'h18: rdata <= {24'd0, channels};
                     8'h1C: rdata <= {24'd0, kernel_size};
                     8'h20: rdata <= {24'd0, num_filters};

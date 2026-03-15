@@ -30,8 +30,8 @@ module edge_ai_cnn_peripheral (
     wire [31:0] image_addr;
     wire [31:0] weight_addr;
     wire [31:0] feature_addr;
-    wire [7:0]  input_width;
-    wire [7:0]  input_height;
+    wire [15:0] input_width;
+    wire [15:0] input_height;
     wire [7:0]  channels;
     wire [7:0]  kernel_size;
     wire [7:0]  num_filters;
@@ -78,6 +78,51 @@ module edge_ai_cnn_peripheral (
         .image_done  (1'b0)  // Managed by datapath top
     );
 
+    // -------------------------------------------------------------------------
+    // Local Memory Instantiation
+    // -------------------------------------------------------------------------
+    // 1. Feature Map RAM (Image Input)
+    wire [7:0] fm_rdata;
+    // Map Image Mem to 0x10000 -> 0x1FFFF (64KB capacity)
+    wire fm_we = bus_we && (bus_addr >= 32'h0001_0000 && bus_addr < 32'h0002_0000);
+    
+    reg [15:0] fm_read_addr;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) fm_read_addr <= 16'd0;
+        else if (start_req) fm_read_addr <= 16'd0;
+        else if (load_win)  fm_read_addr <= fm_read_addr + 1'b1;
+    end
+
+    feature_map_ram #(
+        .DATA_WIDTH(8),
+        .ADDR_WIDTH(16)
+    ) u_fm_ram (
+        .clk   (clk),
+        .wea   (fm_we),
+        .addra (bus_addr[17:2]),
+        .dina  (bus_din[7:0]),
+        .enb   (load_win),
+        .addrb (fm_read_addr),
+        .doutb (fm_rdata)
+    );
+
+    // 2. Weight RAM
+    wire [71:0] wt_rdata;
+    wire wt_we = bus_we && (bus_addr >= 32'h0000_0200 && bus_addr < 32'h0000_0300);
+
+    weight_ram #(
+        .WEIGHT_WIDTH(72),
+        .ADDR_WIDTH(2)
+    ) u_wt_ram (
+        .clk   (clk),
+        .wea   (wt_we),
+        .addra (bus_addr[3:2]),
+        .dina  ({40'd0, bus_din}),  // Simplified 32-bit to 72-bit packing for test
+        .enb   (1'b1),
+        .addrb (2'd0),              // Fixed at index 0 for current simulation
+        .doutb (wt_rdata)
+    );
+
     wire [31:0] fm_out_data;
     wire        fm_out_valid;
 
@@ -89,9 +134,9 @@ module edge_ai_cnn_peripheral (
         .img_height     (input_height),
         .num_channels   (channels),
         .pixel_valid_in (load_win),    // Driven by controller
-        .pixel_in       (8'h01),       // Connect to image buffer read (TODO)
+        .pixel_in       (fm_rdata),    // Connected to local image buffer
         .weights_valid  (en_mac),      // Driven by controller
-        .weight_in      (72'h0101010101010101), // TODO: hook to weight memory
+        .weight_in      (wt_rdata),    // Connected to local weight memory
         .pixel_out      (fm_out_data),
         .out_valid      (fm_out_valid),
         .done           (conv_done)
