@@ -1,172 +1,134 @@
 `timescale 1ns / 1ps
 
 // -----------------------------------------------------------------------------
-// AXI4-Lite Slave Interface
+// AXI4-Lite Slave Interface — Universal Control Wrapper
 //
-// Standard AXI4-Lite slave wrapper for the CNN accelerator register interface.
-// Translates AXI4-Lite read/write transactions to the simple wen/ren/addr/wdata
-// signals expected by `cnn_register_interface.v`.
-//
-// This enables drop-in integration with ARM-based SoCs, Xilinx Zynq, and
-// other AXI4 ecosystem designs.
-//
-// Simplified AXI4-Lite (single outstanding, no burst):
-//   - Write: AWVALID+WVALID → complete in same cycle
-//   - Read:  ARVALID → RVALID+RDATA next cycle
+// Converts standard AXI4-Lite bus transactions into the internal simple bus
+// used by the CNN Register Interface. This makes the IP core compatible
+// with any standard SoC interconnect (Interconnect, SmartConnect, NoC).
 // -----------------------------------------------------------------------------
 
 module axi4_lite_slave #(
     parameter ADDR_WIDTH = 32,
     parameter DATA_WIDTH = 32
 )(
-    input  wire                    ACLK,
-    input  wire                    ARESETn,
+    input  wire                    S_AXI_ACLK,
+    input  wire                    S_AXI_ARESETN,
 
-    // Write Address Channel
-    input  wire [ADDR_WIDTH-1:0]   AWADDR,
-    input  wire                    AWVALID,
-    output reg                     AWREADY,
+    // ---- AXI4-Lite Slave Interface ----
+    input  wire [ADDR_WIDTH-1:0]   S_AXI_AWADDR,
+    input  wire [2:0]              S_AXI_AWPROT,
+    input  wire                    S_AXI_AWVALID,
+    output reg                     S_AXI_AWREADY,
 
-    // Write Data Channel
-    input  wire [DATA_WIDTH-1:0]   WDATA,
-    input  wire [3:0]              WSTRB,
-    input  wire                    WVALID,
-    output reg                     WREADY,
+    input  wire [DATA_WIDTH-1:0]   S_AXI_WDATA,
+    input  wire [3:0]              S_AXI_WSTRB,
+    input  wire                    S_AXI_WVALID,
+    output reg                     S_AXI_WREADY,
 
-    // Write Response Channel
-    output reg  [1:0]              BRESP,
-    output reg                     BVALID,
-    input  wire                    BREADY,
+    output reg  [1:0]              S_AXI_BRESP,
+    output reg                     S_AXI_BVALID,
+    input  wire                    S_AXI_BREADY,
 
-    // Read Address Channel
-    input  wire [ADDR_WIDTH-1:0]   ARADDR,
-    input  wire                    ARVALID,
-    output reg                     ARREADY,
+    input  wire [ADDR_WIDTH-1:0]   S_AXI_ARADDR,
+    input  wire [2:0]              S_AXI_ARPROT,
+    input  wire                    S_AXI_ARVALID,
+    output reg                     S_AXI_ARREADY,
 
-    // Read Data Channel
-    output reg  [DATA_WIDTH-1:0]   RDATA,
-    output reg  [1:0]              RRESP,
-    output reg                     RVALID,
-    input  wire                    RREADY,
+    output reg  [DATA_WIDTH-1:0]   S_AXI_RDATA,
+    output reg  [1:0]              S_AXI_RRESP,
+    output reg                     S_AXI_RVALID,
+    input  wire                    S_AXI_RREADY,
 
-    // Internal register interface (to cnn_register_interface)
-    output reg  [ADDR_WIDTH-1:0]   reg_addr,
-    output reg  [DATA_WIDTH-1:0]   reg_wdata,
-    output reg                     reg_wen,
-    output reg                     reg_ren,
-    input  wire [DATA_WIDTH-1:0]   reg_rdata
+    // ---- Internal Simple Bus Interface ----
+    output reg                     bus_we,
+    output reg                     bus_ren,
+    output reg  [ADDR_WIDTH-1:0]   bus_addr,
+    output reg  [DATA_WIDTH-1:0]   bus_din,
+    input  wire [DATA_WIDTH-1:0]   bus_dout,
+    input  wire                    bus_ready
 );
 
-    // Write FSM
-    localparam WR_IDLE = 2'd0, WR_DATA = 2'd1, WR_RESP = 2'd2;
-    reg [1:0] wr_state;
+    // Write Channel Logic
+    reg [ADDR_WIDTH-1:0] awaddr_reg;
+    reg [DATA_WIDTH-1:0] wdata_reg;
+    reg aw_en;
 
-    // Read FSM
-    localparam RD_IDLE = 2'd0, RD_DATA = 2'd1;
-    reg [1:0] rd_state;
-
-    reg [ADDR_WIDTH-1:0] wr_addr_reg;
-
-    // ---------- Write Path ----------
-    always @(posedge ACLK or negedge ARESETn) begin
-        if (!ARESETn) begin
-            wr_state  <= WR_IDLE;
-            AWREADY   <= 1'b0;
-            WREADY    <= 1'b0;
-            BVALID    <= 1'b0;
-            BRESP     <= 2'b00;
-            reg_wen   <= 1'b0;
-            reg_addr  <= 0;
-            reg_wdata <= 0;
-            wr_addr_reg <= 0;
+    always @(posedge S_AXI_ACLK or negedge S_AXI_ARESETN) begin
+        if (!S_AXI_ARESETN) begin
+            S_AXI_AWREADY <= 1'b0;
+            S_AXI_WREADY  <= 1'b0;
+            S_AXI_BVALID  <= 1'b0;
+            S_AXI_BRESP   <= 2'b00;
+            aw_en         <= 1'b1;
+            bus_we        <= 1'b0;
         end else begin
-            reg_wen <= 1'b0;  // Pulse
+            // Address Ready
+            if (!S_AXI_AWREADY && S_AXI_AWVALID && S_AXI_WVALID && aw_en) begin
+                S_AXI_AWREADY <= 1'b1;
+                awaddr_reg    <= S_AXI_AWADDR;
+            end else begin
+                S_AXI_AWREADY <= 1'b0;
+            end
 
-            case (wr_state)
-                WR_IDLE: begin
-                    BVALID <= 1'b0;
-                    if (AWVALID && WVALID) begin
-                        // Both address and data arrive together
-                        reg_addr  <= AWADDR;
-                        reg_wdata <= WDATA;
-                        reg_wen   <= 1'b1;
-                        AWREADY   <= 1'b1;
-                        WREADY    <= 1'b1;
-                        wr_state  <= WR_RESP;
-                    end else if (AWVALID) begin
-                        wr_addr_reg <= AWADDR;
-                        AWREADY     <= 1'b1;
-                        wr_state    <= WR_DATA;
-                    end
-                end
+            // Data Ready
+            if (!S_AXI_WREADY && S_AXI_WVALID && S_AXI_AWVALID && aw_en) begin
+                S_AXI_WREADY <= 1'b1;
+                wdata_reg    <= S_AXI_WDATA;
+            end else begin
+                S_AXI_WREADY <= 1'b0;
+            end
 
-                WR_DATA: begin
-                    AWREADY <= 1'b0;
-                    if (WVALID) begin
-                        reg_addr  <= wr_addr_reg;
-                        reg_wdata <= WDATA;
-                        reg_wen   <= 1'b1;
-                        WREADY    <= 1'b1;
-                        wr_state  <= WR_RESP;
-                    end
-                end
+            // Trigger Internal Write
+            if (S_AXI_AWREADY && S_AXI_WREADY) begin
+                bus_we   <= 1'b1;
+                bus_addr <= awaddr_reg;
+                bus_din  <= wdata_reg;
+                aw_en    <= 1'b0;
+            end else begin
+                bus_we   <= 1'b0;
+            end
 
-                WR_RESP: begin
-                    AWREADY <= 1'b0;
-                    WREADY  <= 1'b0;
-                    BVALID  <= 1'b1;
-                    BRESP   <= 2'b00;  // OKAY
-                    if (BREADY) begin
-                        BVALID   <= 1'b0;
-                        wr_state <= WR_IDLE;
-                    end
-                end
-
-                default: wr_state <= WR_IDLE;
-            endcase
+            // Respond
+            if (bus_we) begin // Simplified: assume internal bus is 1-cycle for now or wait for ready
+                S_AXI_BVALID <= 1'b1;
+                S_AXI_BRESP  <= 2'b00; // OKAY
+            end else if (S_AXI_BREADY && S_AXI_BVALID) begin
+                S_AXI_BVALID <= 1'b0;
+                aw_en        <= 1'b1;
+            end
         end
     end
 
-    // ---------- Read Path ----------
-    always @(posedge ACLK or negedge ARESETn) begin
-        if (!ARESETn) begin
-            rd_state <= RD_IDLE;
-            ARREADY  <= 1'b0;
-            RVALID   <= 1'b0;
-            RDATA    <= 0;
-            RRESP    <= 2'b00;
-            reg_ren  <= 1'b0;
+    // Read Channel Logic
+    always @(posedge S_AXI_ACLK or negedge S_AXI_ARESETN) begin
+        if (!S_AXI_ARESETN) begin
+            S_AXI_ARREADY <= 1'b0;
+            S_AXI_RVALID  <= 1'b0;
+            S_AXI_RRESP   <= 2'b00;
+            bus_ren       <= 1'b0;
         end else begin
-            reg_ren <= 1'b0;  // Pulse
+            if (!S_AXI_ARREADY && S_AXI_ARVALID) begin
+                S_AXI_ARREADY <= 1'b1;
+                bus_addr      <= S_AXI_ARADDR;
+                bus_ren       <= 1'b1;
+            end else begin
+                S_AXI_ARREADY <= 1'b0;
+                bus_ren       <= 1'b0;
+            end
 
-            case (rd_state)
-                RD_IDLE: begin
-                    RVALID <= 1'b0;
-                    if (ARVALID) begin
-                        reg_addr <= ARADDR;
-                        reg_ren  <= 1'b1;
-                        ARREADY  <= 1'b1;
-                        rd_state <= RD_DATA;
-                    end
-                end
-
-                RD_DATA: begin
-                    ARREADY <= 1'b0;
-                    RDATA   <= reg_rdata;
-                    RVALID  <= 1'b1;
-                    RRESP   <= 2'b00;  // OKAY
-                    if (RREADY) begin
-                        RVALID   <= 1'b0;
-                        rd_state <= RD_IDLE;
-                    end
-                end
-
-                default: rd_state <= RD_IDLE;
-            endcase
+            if (S_AXI_ARREADY) begin
+                // Latch internal response
+                S_AXI_RDATA  <= bus_dout;
+                S_AXI_RVALID <= 1'b1;
+                S_AXI_RRESP  <= 2'b00;
+            end else if (S_AXI_RVALID && S_AXI_RREADY) begin
+                S_AXI_RVALID <= 1'b0;
+            end
         end
     end
 
-    // Suppress unused signals
-    wire _unused = &{1'b0, WSTRB, 1'b0};
+    // Unused warnings
+    wire _unused = &{1'b0, S_AXI_AWPROT, S_AXI_ARPROT, S_AXI_WSTRB, bus_ready, 1'b0};
 
 endmodule

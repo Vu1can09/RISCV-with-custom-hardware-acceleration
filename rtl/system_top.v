@@ -1,23 +1,42 @@
 `timescale 1ns / 1ps
 
 // -----------------------------------------------------------------------------
-// Top-level wrapper for ASIC synthesis
+// UNIVERSAL SYSTEM WRAPPER — ASIC / FPGA Production Top
 //
-// This module instantiates the pipelined RISC-V core with integrated CNN
-// accelerator (memory-mapped) and exposes top-level ports for:
-//   1. Clock and Reset
-//   2. AXI4 Master Interface (for external DDR memory access)
-//   3. Completion Status (done)
+// This module provides a dual-interface standard for modern SoC integration:
+//   1. AXI4 Master (M_AXI): For high-bandwidth DDR data transfers.
+//   2. AXI4-Lite Slave (S_AXI): For register configuration and CPU control.
 //
-// For ASIC implementation, connect these AXI ports to your memory controller
-// or NoC (Network-on-Chip).
+// Compatible with:
+//   - Xilinx AXI Interconnect / SmartConnect
+//   - Intel Qsys / Platform Designer
+//   - OpenLane / Sky130 ASIC flows
+//   - ARM/RISC-V/MIPS based SoCs
 // -----------------------------------------------------------------------------
 
 module system_top (
     input  wire clk,
     input  wire reset,
 
-    // ---- AXI4 Master Interface (External Memory) ----
+    // ---- AXI4-Lite Slave (Control) ----
+    input  wire [31:0] S_AXI_AWADDR,
+    input  wire        S_AXI_AWVALID,
+    output wire        S_AXI_AWREADY,
+    input  wire [31:0] S_AXI_WDATA,
+    input  wire        S_AXI_WVALID,
+    output wire        S_AXI_WREADY,
+    output wire [1:0]  S_AXI_BRESP,
+    output wire        S_AXI_BVALID,
+    input  wire        S_AXI_BREADY,
+    input  wire [31:0] S_AXI_ARADDR,
+    input  wire        S_AXI_ARVALID,
+    output wire        S_AXI_ARREADY,
+    output wire [31:0] S_AXI_RDATA,
+    output wire [1:0]  S_AXI_RRESP,
+    output wire        S_AXI_RVALID,
+    input  wire        S_AXI_RREADY,
+
+    // ---- AXI4 Master (Data) ----
     output wire [31:0] M_AXI_AWADDR,
     output wire [7:0]  M_AXI_AWLEN,
     output wire [2:0]  M_AXI_AWSIZE,
@@ -51,6 +70,15 @@ module system_top (
         .clk         (clk),
         .reset       (reset),
         
+        // Control Bus (AXI-Lite Slave)
+        .S_AXI_AWADDR (S_AXI_AWADDR), .S_AXI_AWVALID(S_AXI_AWVALID),.S_AXI_AWREADY(S_AXI_AWREADY),
+        .S_AXI_WDATA  (S_AXI_WDATA),  .S_AXI_WVALID (S_AXI_WVALID), .S_AXI_WREADY (S_AXI_WREADY),
+        .S_AXI_BRESP  (S_AXI_BRESP),  .S_AXI_BVALID (S_AXI_BVALID), .S_AXI_BREADY (S_AXI_BREADY),
+        .S_AXI_ARADDR (S_AXI_ARADDR), .S_AXI_ARVALID(S_AXI_ARVALID),.S_AXI_ARREADY(S_AXI_ARREADY),
+        .S_AXI_RDATA  (S_AXI_RDATA),  .S_AXI_RRESP  (S_AXI_RRESP),  .S_AXI_RVALID (S_AXI_RVALID),
+        .S_AXI_RREADY (S_AXI_RREADY),
+        
+        // Data Bus (AXI4 Master)
         .M_AXI_AWADDR (M_AXI_AWADDR), .M_AXI_AWLEN  (M_AXI_AWLEN),  .M_AXI_AWSIZE (M_AXI_AWSIZE), 
         .M_AXI_AWBURST(M_AXI_AWBURST),.M_AXI_AWVALID(M_AXI_AWVALID),.M_AXI_AWREADY(M_AXI_AWREADY),
         .M_AXI_WDATA  (M_AXI_WDATA),  .M_AXI_WSTRB  (M_AXI_WSTRB),  .M_AXI_WLAST  (M_AXI_WLAST),
