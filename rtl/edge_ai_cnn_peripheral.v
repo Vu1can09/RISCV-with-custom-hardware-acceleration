@@ -167,7 +167,7 @@ module edge_ai_cnn_peripheral (
         else if (start_req) fm_read_addr <= 16'd0;
         else if (ctrl_load_win | ctrl_l1_start) fm_read_addr <= fm_read_addr + 1'b1;
     end
-    feature_map_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(16)) u_fm_ram (.clk(clk), .wea(fm_we), .addra(fm_wr_addr), .dina(fm_wr_data), .enb(1'b1), .addrb(fm_read_addr), .doutb(fm_rdata));
+    feature_map_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(10)) u_fm_ram (.clk(clk), .wea(fm_we), .addra(fm_wr_addr), .dina(fm_wr_data), .enb(1'b1), .addrb(fm_read_addr), .doutb(fm_rdata));
 
     // =========================================================================
     // Weight RAM Isolation
@@ -193,7 +193,7 @@ module edge_ai_cnn_peripheral (
     reg [15:0] l1_wr_addr; wire [7:0] inter_fm_rdata; reg [15:0] l2_read_addr;
     always @(posedge clk or negedge rst_n) begin if (!rst_n) l1_wr_addr <= 16'd0; else if (ctrl_l1_start) l1_wr_addr <= 16'd0; else if (l1_final_valid) l1_wr_addr <= l1_wr_addr + 1'b1; end
     always @(posedge clk or negedge rst_n) begin if (!rst_n) l2_read_addr <= 16'd0; else if (ctrl_l2_start) l2_read_addr <= 16'd0; else l2_read_addr <= l2_read_addr + 1'b1; end
-    feature_map_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(16)) u_inter_fm (.clk(clk), .wea(l1_final_valid), .addra(l1_wr_addr), .dina(l1_final[7:0]), .enb(1'b1), .addrb(l2_read_addr), .doutb(inter_fm_rdata));
+    feature_map_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(10)) u_inter_fm (.clk(clk), .wea(l1_final_valid), .addra(l1_wr_addr), .dina(l1_final[7:0]), .enb(1'b1), .addrb(l2_read_addr), .doutb(inter_fm_rdata));
 
     // Layer 2
     wire signed [31:0] l2_out_pixel; wire l2_out_valid; wire [15:0] l2_pool_width; wire l2_conv_done;
@@ -202,7 +202,7 @@ module edge_ai_cnn_peripheral (
 
     reg [15:0] fc_wr_addr; wire [7:0] fc_feature_rdata; reg [15:0] fc_read_addr;
     always @(posedge clk or negedge rst_n) begin if (!rst_n) fc_wr_addr <= 16'd0; else if (ctrl_l2_start) fc_wr_addr <= 16'd0; else if (l2_out_valid) fc_wr_addr <= fc_wr_addr + 1'b1; end
-    feature_map_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(16)) u_fc_buf (.clk(clk), .wea(l2_out_valid), .addra(fc_wr_addr), .dina(l2_out_pixel[7:0]), .enb(1'b1), .addrb(fc_read_addr), .doutb(fc_feature_rdata));
+    feature_map_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(10)) u_fc_buf (.clk(clk), .wea(l2_out_valid), .addra(fc_wr_addr), .dina(l2_out_pixel[7:0]), .enb(1'b1), .addrb(fc_read_addr), .doutb(fc_feature_rdata));
 
     // FC Layer & Result RAM
     wire signed [31:0] fc_score; wire fc_score_valid; wire [15:0] fc_wt_rd_addr; wire [7:0] fc_wt_rdata; wire [31:0] fc_bias_rdata;
@@ -212,7 +212,7 @@ module edge_ai_cnn_peripheral (
     wire fc_wt_we = bus_we && (bus_addr >= 32'h0002_0000 && bus_addr < 32'h0002_4000);
     wire [13:0] fc_wt_wra = fc_wt_we ? bus_addr[15:2] : 14'h0;
     wire [7:0]  fc_wt_wrd = fc_wt_we ? bus_din[7:0] : 8'h0;
-    fc_weight_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(14)) u_fc_wt_ram (.clk(clk), .wea(fc_wt_we), .addra(fc_wt_wra), .dina(fc_wt_wrd), .enb(1'b1), .addrb(fc_wt_rd_addr[13:0]), .doutb(fc_wt_rdata));
+    fc_weight_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(10)) u_fc_wt_ram (.clk(clk), .wea(fc_wt_we), .addra(fc_wt_wra), .dina(fc_wt_wrd), .enb(1'b1), .addrb(fc_wt_rd_addr[13:0]), .doutb(fc_wt_rdata));
 
     wire fc_bias_we = bus_we && (bus_addr >= 32'h0002_4000 && bus_addr < 32'h0002_4040);
     wire [3:0]  fc_bias_wra = fc_bias_we ? bus_addr[5:2] : 4'h0;
