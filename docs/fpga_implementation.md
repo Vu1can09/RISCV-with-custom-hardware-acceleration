@@ -7,7 +7,7 @@ There are no ambiguous initial blocks used in the standard modules (only in test
 ## Xilinx Vivado Synthesis
 1. Create a Vivado RTL targeting your board.
 2. Copy `rtl/` into your `Design Sources`. 
-3. Select `edge_ai_cnn_top.v` as `Top Module`.
+3. Select `system_top.v` as `Top Module`.
 4. Run `Synthesis -> Implementation -> Generate Bitstream`.
 
 ## Common Constraints

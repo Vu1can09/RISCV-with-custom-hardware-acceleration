@@ -28,7 +28,7 @@ Inside the acceleration phase:
 ## 6. RTL Design
 We designed the architecture hierarchically through distinct component Verilog modules:
 
-- **`edge_ai_cnn_top`**: The integration wrapper bounding the processor MMIO interface together with the CNN hardware elements.
+- **`riscv_core_top`** & **`system_top`**: The integration wrappers bounding the processor MMIO interface together with the CNN hardware elements.
 - **`cnn_controller`**: Validates configuration, handles the overarching state machine (IDLE, MEM_LOAD, COMPUTE, WRITE_OUT), and routes signals to the datapath.
 - **`conv3d_accelerator`**: Top-level computation wrapper for a single convolution stage. 
 - **`mac_array`**: Represents spatial computation; combinatorially computes 9 multiplications and sums the outputs in parallel for a 3x3 kernel.

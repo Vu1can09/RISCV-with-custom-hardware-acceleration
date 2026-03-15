@@ -19,8 +19,8 @@ flowchart LR
 1. **`conv3d_accelerator.v`**: The wrapper that organizes `line_buffer`, `sliding_window`, `mac_array`, and `channel_accumulator` into an uninterrupted flow of data.
 2. **`cnn_controller.v`**: A Moore finite state machine coordinating memory read requests and controlling accelerator module enables.
 3. **`cnn_register_interface.v`**: An adaptable MMIO address map defining the memory spaces. Exposes `input_width`, `channels`, etc., to the CNN Controller wrapper.
-4. **`riscv_core_controller.v`**: A simulated soft-core driving an instruction sequence simulating software execution. 
-5. **`edge_ai_cnn_top.v`**: The primary wrapper connecting the registers to the processor and the registers to the controller.
+4. **`riscv_core_top.v`**: The 5-stage pipelined RISC-V soft-core that drives the instruction sequence and memory-mapped reads/writes to the CNN.
+5. **`system_top.v`**: The primary synthesis wrapper tying the processor and CNN datapath securely to top-level pins.
 
 ## Memory Models
 - **`feature_map_ram.v`**, **`image_buffer.v`**, **`weight_ram.v`**: Synchronous Dual/Single Port RAM representations, synthesizer friendly for Xilinx block RAMs.

@@ -116,7 +116,7 @@ python3 python_reference/cnn_reference_model.py
 
 If you are reading the Verilog code, start here to understand the hierarchy:
 
-1. **`edge_ai_cnn_top.v`**: The absolute top of the design. Connects the processor to the CNN.
+1. **`system_top.v` / `riscv_core_top.v`**: The absolute top of the design. Connects the full RISC-V processor pipeline to the Memory-Mapped CNN peripheral.
 2. **`cnn_controller.v`**: The "Traffic Cop". A Finite State Machine (FSM) that dictates when to load memory, when to compute, and when to write back based on the `START` signal.
 3. **`conv3d_accelerator.v`**: The computation wrapper. This holds the Line Buffers, Sliding Window, and MAC array.
 4. **`mac_array.v`**: The raw mathematics. Nine `*` (multipliers) and a tree of `+` (adders).
