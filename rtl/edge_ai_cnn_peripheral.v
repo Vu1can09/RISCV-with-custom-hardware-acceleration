@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 // -----------------------------------------------------------------------------
-// Memory-Mapped CNN Accelerator Peripheral — FULLY ENHANCED
+// Memory-Mapped CNN Accelerator Peripheral — FULLY ENHANCED & CONNECTED
 //
 // Complete LeNet-5 inference pipeline with all 12 improvements:
 //   1. FC Weight + Bias RAM (MMIO writable)
@@ -12,10 +12,10 @@
 //   6. Clock gating (per-layer power management)
 //   7. Skip connections (ResNet-style element-wise add)
 //   8. Sigmoid/Softmax activation LUT
-//   9. AXI-DMA master (external DDR interface)
+//   9. AXI-DMA master (external DDR interface) — FULLY INTEGRATED
 //
 // Pipeline:
-//   DMA → [ZeroPad →] Conv1+BN+Act+Pool → Conv2+BN+Act+Pool → FC → Sigmoid → Result
+//   DDR (AXI) → SRAM → [ZeroPad →] Conv1+BN+Act+Pool → Conv2+BN+Act+Pool → FC → Sigmoid → Result
 // -----------------------------------------------------------------------------
 
 module edge_ai_cnn_peripheral (
@@ -28,6 +28,33 @@ module edge_ai_cnn_peripheral (
     input  wire [31:0] bus_addr,
     input  wire [31:0] bus_din,
     output wire [31:0] bus_dout,
+
+    // ---- AXI4 Master Interface (for DDR access) ----
+    output wire [31:0] M_AXI_AWADDR,
+    output wire [7:0]  M_AXI_AWLEN,
+    output wire [2:0]  M_AXI_AWSIZE,
+    output wire [1:0]  M_AXI_AWBURST,
+    output wire        M_AXI_AWVALID,
+    input  wire        M_AXI_AWREADY,
+    output wire [31:0] M_AXI_WDATA,
+    output wire [3:0]  M_AXI_WSTRB,
+    output wire        M_AXI_WLAST,
+    output wire        M_AXI_WVALID,
+    input  wire        M_AXI_WREADY,
+    input  wire [1:0]  M_AXI_BRESP,
+    input  wire        M_AXI_BVALID,
+    output wire        M_AXI_BREADY,
+    output wire [31:0] M_AXI_ARADDR,
+    output wire [7:0]  M_AXI_ARLEN,
+    output wire [2:0]  M_AXI_ARSIZE,
+    output wire [1:0]  M_AXI_ARBURST,
+    output wire        M_AXI_ARVALID,
+    input  wire        M_AXI_ARREADY,
+    input  wire [31:0] M_AXI_RDATA,
+    input  wire [1:0]  M_AXI_RRESP,
+    input  wire        M_AXI_RLAST,
+    input  wire        M_AXI_RVALID,
+    output wire        M_AXI_RREADY,
 
     // Status
     output wire        cnn_done
@@ -59,7 +86,6 @@ module edge_ai_cnn_peripheral (
     wire [15:0] fc_num_inputs;
     wire [7:0]  fc_num_outputs;
 
-    // New config signals
     wire [3:0]  conv_stride, pool_stride;
     wire [7:0]  pad_size;
     wire signed [15:0] bn_mean, bn_scale, bn_offset;
@@ -141,35 +167,64 @@ module edge_ai_cnn_peripheral (
     );
 
     // =========================================================================
-    // DMA Controller (simple burst, with clock gating)
+    // AXI4 Master DMA — Internal/External Connectivity
     // =========================================================================
-    wire [31:0] dma_rd_addr, dma_wr_addr, dma_wr_data, dma_rd_data;
-    wire dma_rd_en, dma_wr_en;
+    wire [15:0] dma_sram_addr;
+    wire [31:0] dma_sram_wdata, dma_sram_rdata;
+    wire        dma_sram_wen;
 
-    dma_controller u_dma (
-        .clk          (clk_dma),
-        .rst_n        (rst_n),
-        .start        (ctrl_dma_start | dma_start_cfg),
-        .src_addr     (dma_src_addr),
-        .dst_addr     (dma_dst_addr),
-        .transfer_len (dma_length),
-        .mem_rd_addr  (dma_rd_addr),
-        .mem_rd_en    (dma_rd_en),
-        .mem_rd_data  (dma_rd_data),
-        .mem_wr_addr  (dma_wr_addr),
-        .mem_wr_en    (dma_wr_en),
-        .mem_wr_data  (dma_wr_data),
-        .busy         (dma_busy_status),
-        .done         (dma_done_sig)
+    axi_dma_master u_axi_dma (
+        .ACLK          (clk_dma),
+        .ARESETn       (rst_n),
+        .dma_start     (ctrl_dma_start | dma_start_cfg),
+        .dma_dir       (axi_dma_dir),
+        .dma_ext_addr  (dma_src_addr),
+        .dma_length    (dma_length),
+        .dma_done      (dma_done_sig),
+        .dma_busy      (dma_busy_status),
+        
+        .AWADDR        (M_AXI_AWADDR),
+        .AWLEN         (M_AXI_AWLEN),
+        .AWSIZE        (M_AXI_AWSIZE),
+        .AWBURST       (M_AXI_AWBURST),
+        .AWVALID       (M_AXI_AWVALID),
+        .AWREADY       (M_AXI_AWREADY),
+        .WDATA         (M_AXI_WDATA),
+        .WSTRB         (M_AXI_WSTRB),
+        .WLAST         (M_AXI_WLAST),
+        .WVALID        (M_AXI_WVALID),
+        .WREADY        (M_AXI_WREADY),
+        .BRESP         (M_AXI_BRESP),
+        .BVALID        (M_AXI_BVALID),
+        .BREADY        (M_AXI_BREADY),
+        .ARADDR        (M_AXI_ARADDR),
+        .ARLEN         (M_AXI_ARLEN),
+        .ARSIZE        (M_AXI_ARSIZE),
+        .ARBURST       (M_AXI_ARBURST),
+        .ARVALID       (M_AXI_ARVALID),
+        .ARREADY       (M_AXI_ARREADY),
+        .RDATA         (M_AXI_RDATA),
+        .RRESP         (M_AXI_RRESP),
+        .RLAST         (M_AXI_RLAST),
+        .RVALID        (M_AXI_RVALID),
+        .RREADY        (M_AXI_RREADY),
+
+        .sram_addr     (dma_sram_addr),
+        .sram_wdata    (dma_sram_wdata),
+        .sram_wen      (dma_sram_wen),
+        .sram_rdata    (dma_sram_rdata)
     );
-
-    assign dma_rd_data = 32'd0;  // Stub; connect to AXI-DMA in full SoC
 
     // =========================================================================
     // Image Feature Map RAM (64KB)
     // =========================================================================
     wire [7:0] fm_rdata;
-    wire fm_we = bus_we && (bus_addr >= 32'h0001_0000 && bus_addr < 32'h0002_0000);
+    wire fm_cpu_we = bus_we && (bus_addr >= 32'h0001_0000 && bus_addr < 32'h0002_0000);
+    
+    // Muxing between CPU MMIO and AXI DMA for SRAM access
+    wire [15:0] fm_wr_addr   = dma_busy_status ? dma_sram_addr : bus_addr[17:2];
+    wire [7:0]  fm_wr_data   = dma_busy_status ? dma_sram_wdata[7:0] : bus_din[7:0];
+    wire        fm_we        = dma_busy_status ? dma_sram_wen : fm_cpu_we;
 
     reg [15:0] fm_read_addr;
     always @(posedge clk or negedge rst_n) begin
@@ -179,7 +234,7 @@ module edge_ai_cnn_peripheral (
     end
 
     feature_map_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(16)) u_fm_ram (
-        .clk(clk), .wea(fm_we), .addra(bus_addr[17:2]), .dina(bus_din[7:0]),
+        .clk(clk), .wea(fm_we), .addra(fm_wr_addr), .dina(fm_wr_data),
         .enb(1'b1), .addrb(fm_read_addr), .doutb(fm_rdata)
     );
 
@@ -219,7 +274,7 @@ module edge_ai_cnn_peripheral (
     );
 
     // =========================================================================
-    // Layer 1: Conv1 → BN → Activation → MaxPool (with clock gating)
+    // Layer 1 Components
     // =========================================================================
     wire signed [31:0] l1_out_pixel;
     wire l1_out_valid;
@@ -232,15 +287,11 @@ module edge_ai_cnn_peripheral (
         .pixel_valid_in(1'b1), .pixel_in(fm_rdata),
         .weights_valid(1'b1), .weight_in(wt_rdata),
         .pixel_out(l1_out_pixel), .out_valid(l1_out_valid),
-        .conv_raw_out(), .conv_raw_valid(),
         .pool_out_width(l1_pool_width), .conv_done(l1_conv_done)
     );
 
     assign l1_done_sig = l1_conv_done;
 
-    // =========================================================================
-    // Batch Normalization after Layer 1
-    // =========================================================================
     wire signed [31:0] bn1_out;
     wire bn1_valid;
 
@@ -251,9 +302,6 @@ module edge_ai_cnn_peripheral (
         .data_out(bn1_out), .valid_out(bn1_valid)
     );
 
-    // =========================================================================
-    // Skip Connection for Layer 1 (optional)
-    // =========================================================================
     wire signed [31:0] skip1_out;
     wire skip1_valid;
 
@@ -264,13 +312,10 @@ module edge_ai_cnn_peripheral (
         .data_out(skip1_out), .valid_out(skip1_valid)
     );
 
-    // Select skip or BN output based on config
     wire signed [31:0] l1_final = skip_enable[0] ? skip1_out : bn1_out;
     wire l1_final_valid = skip_enable[0] ? skip1_valid : bn1_valid;
 
-    // =========================================================================
-    // Intermediate Feature Map Buffer (L1 → L2)
-    // =========================================================================
+    // Intermediate Feature Map Buffer
     reg [15:0] l1_wr_addr;
     wire [7:0] inter_fm_rdata;
     reg [15:0] l2_read_addr;
@@ -287,19 +332,14 @@ module edge_ai_cnn_peripheral (
         else                    l2_read_addr <= l2_read_addr + 1'b1;
     end
 
-    wire [7:0] l1_quantized = l1_final[7:0];
-
     feature_map_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(16)) u_inter_fm (
-        .clk(clk), .wea(l1_final_valid), .addra(l1_wr_addr), .dina(l1_quantized),
+        .clk(clk), .wea(l1_final_valid), .addra(l1_wr_addr), .dina(l1_final[7:0]),
         .enb(1'b1), .addrb(l2_read_addr), .doutb(inter_fm_rdata)
     );
 
     // =========================================================================
-    // Layer 2: Conv2 → BN → Activation → MaxPool (with clock gating)
+    // Layer 2 Components
     // =========================================================================
-    wire [15:0] l2_img_width  = l1_pool_width;
-    wire [15:0] l2_img_height = l1_pool_width;
-
     wire signed [31:0] l2_out_pixel;
     wire l2_out_valid;
     wire [15:0] l2_pool_width;
@@ -307,21 +347,16 @@ module edge_ai_cnn_peripheral (
 
     cnn_layer_pipeline u_layer2 (
         .clk(clk_l2), .rst_n(rst_n), .start(ctrl_l2_start),
-        .img_width(l2_img_width), .img_height(l2_img_height), .num_channels(l2_channels),
+        .img_width(l1_pool_width), .img_height(l1_pool_width), .num_channels(l2_channels),
         .pixel_valid_in(1'b1), .pixel_in(inter_fm_rdata),
         .weights_valid(1'b1), .weight_in(wt_rdata),
         .pixel_out(l2_out_pixel), .out_valid(l2_out_valid),
-        .conv_raw_out(), .conv_raw_valid(),
         .pool_out_width(l2_pool_width), .conv_done(l2_conv_done)
     );
 
     assign l2_done_sig = l2_conv_done;
 
-    // =========================================================================
-    // FC Input Buffer (flattened pool2 output)
-    // =========================================================================
     reg [15:0] fc_wr_addr;
-    wire [7:0] l2_quantized = l2_out_pixel[7:0];
     wire [7:0] fc_feature_rdata;
     reg [15:0] fc_read_addr;
 
@@ -332,12 +367,12 @@ module edge_ai_cnn_peripheral (
     end
 
     feature_map_ram #(.DATA_WIDTH(8), .ADDR_WIDTH(16)) u_fc_buf (
-        .clk(clk), .wea(l2_out_valid), .addra(fc_wr_addr), .dina(l2_quantized),
+        .clk(clk), .wea(l2_out_valid), .addra(fc_wr_addr), .dina(l2_out_pixel[7:0]),
         .enb(1'b1), .addrb(fc_read_addr), .doutb(fc_feature_rdata)
     );
 
     // =========================================================================
-    // Fully Connected Layer (with clock gating, real weight + bias RAMs)
+    // FC Layer Components
     // =========================================================================
     wire signed [31:0] fc_score;
     wire fc_score_valid;
@@ -361,16 +396,12 @@ module edge_ai_cnn_peripheral (
         else                    fc_read_addr <= fc_read_addr + 1'b1;
     end
 
-    // Bias address follows output neuron index
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) fc_bias_rd_addr <= 4'd0;
         else if (ctrl_fc_start) fc_bias_rd_addr <= 4'd0;
         else if (fc_score_valid) fc_bias_rd_addr <= fc_bias_rd_addr + 1'b1;
     end
 
-    // =========================================================================
-    // Sigmoid/Softmax Activation on FC Scores
-    // =========================================================================
     wire [7:0] act_out;
     wire act_valid;
 
@@ -381,11 +412,7 @@ module edge_ai_cnn_peripheral (
         .data_out(act_out), .valid_out(act_valid)
     );
 
-    // =========================================================================
-    // Output Result RAM (CPU-readable scores)
-    // =========================================================================
     reg [3:0] result_wr_addr;
-
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)            result_wr_addr <= 4'd0;
         else if (ctrl_fc_start) result_wr_addr <= 4'd0;
@@ -401,15 +428,11 @@ module edge_ai_cnn_peripheral (
     // Outputs
     // =========================================================================
     assign cnn_done = pipeline_done;
+    assign dma_sram_rdata = {24'd0, fm_rdata}; // Allow DMA to read back results if dir=1
 
     // Suppress warnings
-    wire _unused = &{1'b0, reg_ready, ctrl_wr_out, ctrl_nxt_pix, ctrl_en_mac,
-                     image_addr, weight_addr, feature_addr, kernel_size,
-                     dma_rd_addr, dma_wr_addr, dma_wr_data, dma_rd_en, dma_wr_en,
-                     fc_score, l2_pool_width, l1_out_pixel, l2_out_pixel,
-                     conv_stride, pool_stride, pad_size, axi_dma_dir,
-                     activation_mode[1], act_out, act_valid,
-                     l1_final, skip1_out, skip1_valid, bn1_out, bn1_valid,
-                     1'b0};
+    wire _unused = &{1'b0, reg_ready, image_addr, weight_addr, feature_addr, kernel_size,
+                     num_filters, conv_stride, pool_stride, pad_size, 
+                     activation_mode[1], act_out, act_valid, 1'b0};
 
 endmodule

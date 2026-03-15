@@ -1,21 +1,48 @@
 //============================================================================
 // Module: RISC-V Core Top (riscv_core_top)
 // Description: Top-level integration of the 5-stage pipelined RV32I processor
-//              with convolution accelerator.
+//              with convolution accelerator and AXI DMA Master.
 //
 // Pipeline Stages:
 //   IF  -> IF/ID -> ID  -> ID/EX -> EX  -> EX/MEM -> MEM -> MEM/WB -> WB
 //
 // Features:
-//   - Basic data hazard detection (stall on load-use)
-//   - NOP insertion on stall
-//   - Convolution accelerator integrated at EX stage
-//   - Data forwarding from EX/MEM and MEM/WB stages
+//   - Basic data hazard detection
+//   - Convolution accelerator integrated as MMIO peripheral
+//   - AXI4 Master interface for external memory (DDR) access
 //============================================================================
 
 module riscv_core_top (
     input  wire        clk,
     input  wire        reset,
+
+    // ---- AXI4 Master Interface (from internal CNN) ----
+    output wire [31:0] M_AXI_AWADDR,
+    output wire [7:0]  M_AXI_AWLEN,
+    output wire [2:0]  M_AXI_AWSIZE,
+    output wire [1:0]  M_AXI_AWBURST,
+    output wire        M_AXI_AWVALID,
+    input  wire        M_AXI_AWREADY,
+    output wire [31:0] M_AXI_WDATA,
+    output wire [3:0]  M_AXI_WSTRB,
+    output wire        M_AXI_WLAST,
+    output wire        M_AXI_WVALID,
+    input  wire        M_AXI_WREADY,
+    input  wire [1:0]  M_AXI_BRESP,
+    input  wire        M_AXI_BVALID,
+    output wire        M_AXI_BREADY,
+    output wire [31:0] M_AXI_ARADDR,
+    output wire [7:0]  M_AXI_ARLEN,
+    output wire [2:0]  M_AXI_ARSIZE,
+    output wire [1:0]  M_AXI_ARBURST,
+    output wire        M_AXI_ARVALID,
+    input  wire        M_AXI_ARREADY,
+    input  wire [31:0] M_AXI_RDATA,
+    input  wire [1:0]  M_AXI_RRESP,
+    input  wire        M_AXI_RLAST,
+    input  wire        M_AXI_RVALID,
+    output wire        M_AXI_RREADY,
+
     output wire        system_done
 );
 
@@ -109,25 +136,17 @@ module riscv_core_top (
     assign id_rs2_addr = ifid_instruction[24:20];
     assign id_funct7   = ifid_instruction[31:25];
 
-    // Immediate generation (I-type sign extension)
     assign id_immediate = {{20{ifid_instruction[31]}}, ifid_instruction[31:20]};
 
-    // Stall on load-use hazard: if the instruction in EX stage is a load
-    // and the destination register matches a source in ID stage
-    // Stall on load-use hazard
     assign load_use_stall = idex_mem_read &&
                    ((idex_rd_addr == id_rs1_addr) || (idex_rd_addr == id_rs2_addr)) &&
                    (idex_rd_addr != 5'd0);
     assign stall = load_use_stall;
-
-    // Only flush ID/EX on load-use stall (insert bubble)
     assign id_flush = load_use_stall;
 
     //==========================================================================
     // Data Forwarding Unit
     //==========================================================================
-    // Forward from EX/MEM stage
-    // Forward from MEM/WB stage
     assign ex_forwarded_rs1 =
         (exmem_reg_write && (exmem_rd_addr != 5'd0) && (exmem_rd_addr == idex_rs1_addr))
             ? exmem_alu_result :
@@ -143,7 +162,7 @@ module riscv_core_top (
         idex_rs2_data;
 
     //==========================================================================
-    // Stage 1: Instruction Fetch (IF)
+    // Stage 1: IF
     //==========================================================================
     pc u_pc (
         .clk    (clk),
@@ -157,9 +176,6 @@ module riscv_core_top (
         .instruction (instruction_fetched)
     );
 
-    //==========================================================================
-    // Pipeline Register: IF/ID
-    //==========================================================================
     pipeline_register_if_id u_ifid (
         .clk             (clk),
         .reset           (reset),
@@ -172,7 +188,7 @@ module riscv_core_top (
     );
 
     //==========================================================================
-    // Stage 2: Instruction Decode (ID)
+    // Stage 2: ID
     //==========================================================================
     control_unit u_ctrl (
         .opcode      (id_opcode),
@@ -198,22 +214,17 @@ module riscv_core_top (
         .rd_data   (wb_write_data)
     );
 
-    //==========================================================================
-    // Pipeline Register: ID/EX
-    //==========================================================================
     pipeline_register_id_ex u_idex (
         .clk             (clk),
         .reset           (reset),
         .stall           (1'b0),
         .flush           (id_flush),
-        // Control in
         .reg_write_in    (id_reg_write),
         .alu_src_in      (id_alu_src),
         .alu_ctrl_in     (id_alu_ctrl),
         .mem_read_in     (id_mem_read),
         .mem_write_in    (id_mem_write),
         .mem_to_reg_in   (id_mem_to_reg),
-        // Data in
         .pc_in           (ifid_pc),
         .rs1_data_in     (id_rs1_data),
         .rs2_data_in     (id_rs2_data),
@@ -221,14 +232,12 @@ module riscv_core_top (
         .rd_addr_in      (id_rd),
         .rs1_addr_in     (id_rs1_addr),
         .rs2_addr_in     (id_rs2_addr),
-        // Control out
         .reg_write_out   (idex_reg_write),
         .alu_src_out     (idex_alu_src),
         .alu_ctrl_out    (idex_alu_ctrl),
         .mem_read_out    (idex_mem_read),
         .mem_write_out   (idex_mem_write),
         .mem_to_reg_out  (idex_mem_to_reg),
-        // Data out
         .pc_out          (idex_pc),
         .rs1_data_out    (idex_rs1_data),
         .rs2_data_out    (idex_rs2_data),
@@ -239,10 +248,8 @@ module riscv_core_top (
     );
 
     //==========================================================================
-    // Stage 3: Execute (EX)
+    // Stage 3: EX
     //==========================================================================
-
-    // ALU operand B mux: rs2 forwarded data or immediate
     assign ex_alu_operand_b = idex_alu_src ? idex_immediate : ex_forwarded_rs2;
 
     alu u_alu (
@@ -253,50 +260,39 @@ module riscv_core_top (
         .zero_flag  (ex_zero_flag)
     );
 
-    //==========================================================================
-    // Pipeline Register: EX/MEM
-    //==========================================================================
     pipeline_register_ex_mem u_exmem (
         .clk              (clk),
         .reset            (reset),
         .stall            (1'b0),
-        // Control in
         .reg_write_in     (idex_reg_write),
         .mem_read_in      (idex_mem_read),
         .mem_write_in     (idex_mem_write),
         .mem_to_reg_in    (idex_mem_to_reg),
-        // Data in
         .alu_result_in    (ex_alu_result),
         .rs2_data_in      (ex_forwarded_rs2),
         .rd_addr_in       (idex_rd_addr),
-        // Control out
         .reg_write_out    (exmem_reg_write),
         .mem_read_out     (exmem_mem_read),
         .mem_write_out    (exmem_mem_write),
         .mem_to_reg_out   (exmem_mem_to_reg),
-        // Data out
         .alu_result_out   (exmem_alu_result),
         .rs2_data_out     (exmem_rs2_data),
         .rd_addr_out      (exmem_rd_addr)
     );
 
     //==========================================================================
-    // Stage 4: Memory Access (MEM)
+    // Stage 4: MEM
     //==========================================================================
-    // Simple data memory (256 words, addresses 0x0000 - 0x03FC)
     reg [31:0] data_memory [0:255];
 
-    // Address Decoding
-    wire is_cnn_addr  = (exmem_alu_result >= 32'h0000_1000) && (exmem_alu_result < 32'h0000_2000);
+    wire is_cnn_addr  = (exmem_alu_result >= 32'h0000_1000) && (exmem_alu_result < 32'h0004_0000);
     wire is_dmem_addr = (exmem_alu_result <  32'h0000_0400);
 
     wire [31:0] dmem_read_data = (exmem_mem_read && is_dmem_addr) ? data_memory[exmem_alu_result[9:2]] : 32'd0;
     wire [31:0] cnn_read_data;
     
-    // Memory read routing
     assign mem_read_data = is_cnn_addr ? cnn_read_data : dmem_read_data;
 
-    // Memory write routing for Data Memory
     always @(posedge clk) begin
         if (exmem_mem_write && is_dmem_addr) begin
             data_memory[exmem_alu_result[9:2]] <= exmem_rs2_data;
@@ -304,7 +300,7 @@ module riscv_core_top (
     end
 
     //==========================================================================
-    // Memory-Mapped CNN Accelerator Integration
+    // CNN Peripheral Integration with AXI Master Ports
     //==========================================================================
     wire cnn_done;
     wire cnn_bus_ren = exmem_mem_read && is_cnn_addr;
@@ -314,55 +310,49 @@ module riscv_core_top (
         .rst_n    (~reset),
         .bus_we   (exmem_mem_write && is_cnn_addr),
         .bus_ren  (cnn_bus_ren),
-        .bus_addr (exmem_alu_result - 32'h0000_1000), // Normalize to 0x00 offset
+        .bus_addr (exmem_alu_result - 32'h0000_1000),
         .bus_din  (exmem_rs2_data),
         .bus_dout (cnn_read_data),
+        
+        .M_AXI_AWADDR (M_AXI_AWADDR), .M_AXI_AWLEN  (M_AXI_AWLEN),  .M_AXI_AWSIZE (M_AXI_AWSIZE), 
+        .M_AXI_AWBURST(M_AXI_AWBURST),.M_AXI_AWVALID(M_AXI_AWVALID),.M_AXI_AWREADY(M_AXI_AWREADY),
+        .M_AXI_WDATA  (M_AXI_WDATA),  .M_AXI_WSTRB  (M_AXI_WSTRB),  .M_AXI_WLAST  (M_AXI_WLAST),
+        .M_AXI_WVALID (M_AXI_WVALID), .M_AXI_WREADY (M_AXI_WREADY),
+        .M_AXI_BRESP  (M_AXI_BRESP),  .M_AXI_BVALID (M_AXI_BVALID), .M_AXI_BREADY (M_AXI_BREADY),
+        .M_AXI_ARADDR (M_AXI_ARADDR), .M_AXI_ARLEN  (M_AXI_ARLEN),  .M_AXI_ARSIZE (M_AXI_ARSIZE),
+        .M_AXI_ARBURST(M_AXI_ARBURST),.M_AXI_ARVALID(M_AXI_ARVALID),.M_AXI_ARREADY(M_AXI_ARREADY),
+        .M_AXI_RDATA  (M_AXI_RDATA),  .M_AXI_RRESP  (M_AXI_RRESP),  .M_AXI_RLAST  (M_AXI_RLAST),
+        .M_AXI_RVALID (M_AXI_RVALID), .M_AXI_RREADY (M_AXI_RREADY),
+        
         .cnn_done (cnn_done)
     );
 
     assign system_done = cnn_done;
 
     //==========================================================================
-    // Pipeline Register: MEM/WB
+    // Stage 5: WB
     //==========================================================================
     pipeline_register_mem_wb u_memwb (
         .clk              (clk),
         .reset            (reset),
-        // Control in
         .reg_write_in     (exmem_reg_write),
         .mem_to_reg_in    (exmem_mem_to_reg),
-        // Data in
         .mem_data_in      (mem_read_data),
         .alu_result_in    (exmem_alu_result),
         .rd_addr_in       (exmem_rd_addr),
-        // Control out
         .reg_write_out    (memwb_reg_write),
         .mem_to_reg_out   (memwb_mem_to_reg),
-        // Data out
         .mem_data_out     (memwb_mem_data),
         .alu_result_out   (memwb_alu_result),
         .rd_addr_out      (memwb_rd_addr)
     );
 
-    //==========================================================================
-    // Stage 5: Write Back (WB)
-    //==========================================================================
     always @(*) begin
         case (memwb_mem_to_reg)
-            2'b00:   wb_write_data = memwb_alu_result;    // From ALU
-            2'b01:   wb_write_data = memwb_mem_data;      // From memory
+            2'b00:   wb_write_data = memwb_alu_result;
+            2'b01:   wb_write_data = memwb_mem_data;
             default: wb_write_data = memwb_alu_result;
         endcase
     end
-
-    //==========================================================================
-    // Debug: Monitor register writes (for simulation)
-    //==========================================================================
-    /*always @(posedge clk) begin
-        if (memwb_reg_write && (memwb_rd_addr != 5'd0)) begin
-            $display("TIME=%0t | WB: x%0d = 0x%08h",
-                    $time, memwb_rd_addr, wb_write_data);
-      end
-    end*/
 
 endmodule
