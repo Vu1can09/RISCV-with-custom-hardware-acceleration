@@ -75,7 +75,9 @@ The system centers around the RISC-V Controller acting as the "Brain", dispatchi
 └──────────────────────────────────────┘
 ```
 
-![Edge AI System Flowchart](diagrams/system_flowchart.png)
+![LeNet-5 SoC Architecture](diagrams/lenet5_system_architecture.png)
+
+> The original single-layer system flowchart is retained for reference: [system_flowchart.png](diagrams/system_flowchart.png)
 
 ### 2. LeNet-5 Inference Pipeline
 
@@ -109,7 +111,9 @@ Input Image (up to 2048×2048)
 
 Each convolution layer internally contains:
 
-![CNN Datapath Architecture](diagrams/pipeline_datapath_diagram.png)
+![CNN Datapath Architecture](diagrams/lenet5_pipeline_datapath.png)
+
+> The original single-layer datapath diagram is retained: [pipeline_datapath_diagram.png](diagrams/pipeline_datapath_diagram.png)
 
 1. **Line Buffers (BRAM):** Cache two full rows of the image to produce a 2D spatial window — supports up to 2048px wide.
 2. **Sliding Window:** Automatically shifts a 3×3 frame across the image, generating 9 pixels per clock.
@@ -216,6 +220,8 @@ If you are reading the Verilog code, start here to understand the hierarchy:
 ### CNN Accelerator
 3. **`edge_ai_cnn_peripheral.v`**: The full LeNet-5 CNN peripheral. Contains Layer 1, Layer 2, FC, DMA, and all intermediate SRAM buffers.
 4. **`cnn_controller.v`**: The multi-layer FSM that sequences `DMA → Conv1 → Conv2 → FC → DONE`.
+
+![Controller FSM](diagrams/controller_fsm_diagram.png)
 5. **`cnn_register_interface.v`**: The MMIO register map — allows the CPU to configure image size, channels, filters, DMA parameters, and trigger inference.
 6. **`cnn_layer_pipeline.v`**: Reusable single-layer wrapper chaining `conv3d_accelerator → ReLU → max_pool_2x2`.
 
@@ -257,6 +263,8 @@ The RISC-V CPU configures the CNN accelerator by writing to these memory-mapped 
 | `0x38` | L2_FILTERS | 8-bit | Layer 2 output filters |
 | `0x3C` | FC_INPUTS | 16-bit | FC flattened input size |
 | `0x40` | FC_OUTPUTS | 8-bit | FC output classes |
+
+![MMIO Register Map](diagrams/mmio_register_map.png)
 
 ---
 
