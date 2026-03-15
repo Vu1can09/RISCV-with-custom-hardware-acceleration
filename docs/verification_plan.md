@@ -16,7 +16,7 @@ A fully custom automated script (`scripts/run_simulation.sh`) drives the entire 
 - **3D Convolution Accelerator (`conv3d_accelerator_tb.v`)**: Validates the true sequential logic of parsing streaming input image blocks, catching them in the line buffers, aligning them into sliding windows, and executing the nested multi-channel accumulation loops. Testbenches inject a stream of known values (e.g., all 1s or incrementing pixels) and read out the memory stream to verify correct bounding.
 
 ### 3. Memory-Mapped Datapath Validation
-- **Top System Integration (`system_integration_tb.v`)**: Represents the absolute End-to-End hardware dataflow mimicking a RISC-V processor. It writes the configuration data down an emulated MMIO mapped bus (setting `START` registers, polling `DONE` registers), loads physical arrays into the memory blocks, and waits for the hardware accelerator to process all pixels and assert the completion interrupt.
+- **Top System Integration (`system_integration_tb.v`)**: Represents the absolute End-to-End hardware dataflow mimicking a RISC-V processor. It writes the configuration data down an emulated MMIO mapped bus (setting `START` registers, polling `DONE` registers), loads physical arrays into the memory blocks, and waits for the hardware accelerator to process all pixels and assert the completion interrupt. This testbench also verifies standard **AXI4 Dual-Interface** compliance and that **PPA Isolations** correctly block idle switching.
 
 ## The Python Ground Truth Model (`cnn_reference_model.py`)
 

@@ -19,6 +19,8 @@ By designing a **Hardware Accelerator**, we can utilize hundreds of parallel mul
 
 ### ⚡ Key Features
 - **Full LeNet-5 Pipeline**: Conv1 → ReLU → Pool → Conv2 → ReLU → Pool → FC → Classification
+- **Industrial Bus Standards**: Features **AXI4 Master** (Data) and **AXI4-Lite Slave** (Control) interfaces
+- **PPA Optimization**: Implements **Operand Isolation**, **Clock Gating**, and **Deep Pipelining** for max Fmax and low power
 - **INT8 Quantized Inference**: 8-bit pixel/weight precision (same as Google Edge TPU)
 - **DMA Engine**: Burst memory transfers without CPU stalling
 - **HD Image Support**: Processes images up to 2048×2048 pixels
@@ -117,7 +119,7 @@ Each convolution layer internally contains:
 
 1. **Line Buffers (BRAM):** Cache two full rows of the image to produce a 2D spatial window — supports up to 2048px wide.
 2. **Sliding Window:** Automatically shifts a 3×3 frame across the image, generating 9 pixels per clock.
-3. **MAC Array (Multiply-Accumulate):** 9 parallel multipliers compute the 3×3 convolution in a single cycle.
+3. **Pipelined MAC Array:** 9 parallel multipliers compute the 3×3 convolution with balanced pipeline stages and **Operand Isolation** to save dynamic power.
 4. **Channel Accumulator:** Sums partial results across depth channels (e.g., RGB) before emitting the final value.
 5. **ReLU:** Combinational activation — clamps negative values to zero with zero latency.
 6. **Max Pool 2×2:** Streaming 2×2 max pooling that halves spatial dimensions using an internal line buffer.
@@ -129,18 +131,20 @@ Each convolution layer internally contains:
 ```text
 .
 ├── rtl/                              # Integrated System RTL
-│   ├── system_top.v                  # ASIC/FPGA synthesis top module
+│   ├── system_top.v                  # ASIC/FPGA generic AXI4 SoC wrapper
+│   ├── axi4_lite_slave.v             # Standard AXI4-Lite control bridge
+│   ├── axi_dma_master.v              # High-bandwidth AXI4 Master for DDR
 │   ├── riscv_core_top.v              # 5-stage pipelined RV32I CPU
-│   ├── edge_ai_cnn_peripheral.v      # LeNet-5 CNN accelerator wrapper
+│   ├── edge_ai_cnn_peripheral.v      # LeNet-5 CNN accelerator wrapper + Clock Gating
 │   ├── cnn_controller.v              # Multi-layer FSM controller
 │   ├── cnn_register_interface.v      # MMIO register map
 │   ├── cnn_layer_pipeline.v          # Reusable Conv→ReLU→Pool wrapper
 │   ├── conv3d_accelerator.v          # 3D convolution datapath
 │   ├── relu.v                        # ReLU activation function
-│   ├── max_pool_2x2.v               # 2×2 max pooling unit
-│   ├── fc_layer.v                    # Fully connected classification layer
-│   ├── dma_controller.v             # Burst DMA engine
-│   ├── mac_array.v                   # 9-element parallel MAC array
+│   ├── max_pool_2x2.v                # 2×2 max pooling unit
+│   ├── fc_layer.v                    # Pipelined Fully Connected classification layer
+│   ├── dma_controller.v              # Simple burst DMA engine (legacy)
+│   ├── mac_array.v                   # 9-element pipelined MAC array
 │   ├── line_buffer.v                 # BRAM-inferred row caching
 │   ├── sliding_window.v             # 3×3 spatial window generator
 │   ├── channel_accumulator.v         # Multi-channel result accumulator

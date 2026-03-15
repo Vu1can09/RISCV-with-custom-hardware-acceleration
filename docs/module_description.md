@@ -12,7 +12,7 @@ Input → [ZeroPad] → Conv1 → BN → ReLU/Sigmoid → Pool → Conv2 → BN 
 
 | Module | Description |
 |--------|-------------|
-| `mac_array.v` | 9 pipelined multipliers + adder tree for 3×3 convolution |
+| `mac_array.v` | 9 pipelined multipliers + adder tree with **Operand Isolation** for 3×3 convolution |
 | `multi_filter_mac.v` | N-way parallel MAC bank for N× filter throughput |
 | `line_buffer.v` | Dual BRAM FIFOs, up to 2048px wide |
 | `sliding_window.v` | 3×3 shift-register window generating 9 pixels/cycle |
@@ -24,7 +24,7 @@ Input → [ZeroPad] → Conv1 → BN → ReLU/Sigmoid → Pool → Conv2 → BN 
 | `skip_add.v` | Element-wise residual add (ResNet-style) |
 | `zero_pad.v` | Configurable zero-padding for dimension preservation |
 | `stride_controller.v` | Pixel decimation for strided convolution/pooling |
-| `fc_layer.v` | Sequential MAC fully connected classification layer |
+| `fc_layer.v` | Sequential MAC fully connected classification layer (Pipelined MAC) |
 
 ## Memory Modules
 
@@ -54,6 +54,6 @@ Input → [ZeroPad] → Conv1 → BN → ReLU/Sigmoid → Pool → Conv2 → BN 
 
 | Module | Description |
 |--------|-------------|
-| `edge_ai_cnn_peripheral.v` | Top-level CNN peripheral with full pipeline |
+| `edge_ai_cnn_peripheral.v` | Top-level CNN peripheral with full pipeline and configurable Clock Gating |
 | `riscv_core_top.v` | 5-stage RV32I CPU with MMIO CNN interface |
 | `system_top.v` | ASIC/FPGA synthesis top module |

@@ -30,7 +30,7 @@ The CPU supports the base `RV32I` integer instruction set and implements sophist
 
 ### CNN Accelerator Subsystem
 
-The accelerator implements a full **LeNet-5** inference pipeline, sequenced by a multi-layer FSM controller:
+The accelerator implements a full **LeNet-5** inference pipeline, sequenced by a multi-layer FSM controller. It features an **AXI4 Master** interface for high-speed DMA data fetching and an **AXI4-Lite Slave** interface for robust register control. The entire datapath is optimized for Power, Performance, and Area (PPA), utilizing **Operand Isolation** and **Clock Gating** to minimize dynamic power consumption.
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
@@ -96,7 +96,7 @@ Each convolution layer pipeline (`cnn_layer_pipeline.v`) internally chains:
 
 1. **Line Buffers (BRAM):** Cache two full rows (up to 2048px) to produce a valid 3×3 window every clock cycle.
 2. **Sliding Window:** Shifts a 3×3 frame spatially, generating 9 pixels simultaneously.
-3. **MAC Array:** 9 parallel hardware multipliers compute the 3×3 dot product in one cycle.
+3. **Pipelined MAC Array:** 9 parallel hardware multipliers compute the 3×3 dot product. The multipliers are pipelined for high frequency (Fmax) and feature **Operand Isolation** to drastically reduce switching power when idle.
 4. **Channel Accumulator:** Sums partial results across depth channels (e.g., RGB).
 5. **ReLU:** Combinational activation — clamps negative values to zero.
 6. **Max Pool 2×2:** Streaming pooling that halves spatial dimensions.

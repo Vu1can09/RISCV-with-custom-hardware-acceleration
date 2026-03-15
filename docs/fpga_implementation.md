@@ -1,7 +1,7 @@
 # FPGA / ASIC Implementation Flow
 
 ## Setup & Compatibility
-This RTL relies entirely on synthesizable Verilog 2001 constructs. There are no ambiguous initial blocks used in the standard modules (only in testbenches), and resets are handled via active-low `rst_n` asynchronous clears. Memory is inferred utilizing basic array structures which both Quartus and Vivado map cleanly to native M20K / Block-RAM memory primitives. The `system_top.v` module exposes only `clk`, `reset`, and `done` — ideal for both FPGA and ASIC synthesis flows.
+This RTL relies entirely on synthesizable Verilog 2001 constructs. There are no ambiguous initial blocks used in the standard modules (only in testbenches), and resets are handled via active-low `rst_n` asynchronous clears. Memory is inferred utilizing basic array structures which both Quartus and Vivado map cleanly to native M20K / Block-RAM memory primitives. The `system_top.v` module exposes `clk`, `reset`, `done`, and standard **AXI4 Master / AXI4-Lite Slave** ports — industrial standards ideal for both FPGA and ASIC synthesis flows.
 
 ## Xilinx Vivado Synthesis
 1. Create a Vivado RTL project targeting your board.
@@ -21,6 +21,7 @@ This RTL relies entirely on synthesizable Verilog 2001 constructs. There are no 
 - [x] **No initial blocks in datapath**: All memories and LUTs use synthesizable reset or combinational logic. (Only `instruction_memory.v` and `data_memory.v` use `initial` for simulation/FPGA loading; these should be replaced with SRAM macros for ASIC).
 - [x] **Verified Port Mapping**: All 12 new improvements (Batch Norm, FC Layer, AXI-DMA, etc.) have been verified for port consistency and logical connectivity.
 - [x] **Clock Gating**: Integrated Clock Gating (ICG) cells included for per-layer power management.
+- [x] **PPA Optimization**: Includes **Operand Isolation** on SRAM/MAC buses to reduce dynamic power, and **Deep Pipelining** to improve maximum clock frequency (Fmax).
 
 ### Simulation Verification
 The full LeNet-5 integrated pipeline has been verified using a comprehensive suite of testbenches:
