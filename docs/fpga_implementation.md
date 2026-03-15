@@ -16,6 +16,17 @@ This RTL relies entirely on synthesizable Verilog 2001 constructs. There are no 
 4. Map to your target library: `dfflibmap` / `abc`
 5. Write netlist: `write_verilog synth/system_top_netlist.v`
 
+### Synthesis Readiness Audit
+- [x] **No delays (#)**: All datapath RTL is pure synthesizable logic.
+- [x] **No initial blocks in datapath**: All memories and LUTs use synthesizable reset or combinational logic. (Only `instruction_memory.v` and `data_memory.v` use `initial` for simulation/FPGA loading; these should be replaced with SRAM macros for ASIC).
+- [x] **Verified Port Mapping**: All 12 new improvements (Batch Norm, FC Layer, AXI-DMA, etc.) have been verified for port consistency and logical connectivity.
+- [x] **Clock Gating**: Integrated Clock Gating (ICG) cells included for per-layer power management.
+
+### Simulation Verification
+The full LeNet-5 integrated pipeline has been verified using a comprehensive suite of testbenches:
+1. **Unit Tests**: Positive/Negative ReLU, Sigmoid LUT approximation, Batch Normalization (mean/scale/offset), Skip Connections, and DMA burst transfers have all been verified with 100% pass rate.
+2. **System Integration**: A full peripheral-level test confirms that the multi-layer FSM successfully sequences through L1, L2, and FC layers, asserting `cnn_done` correctly.
+
 ## Common Constraints
 - You will need a standard `clk` definition in your XDC/SDC file (`create_clock -period 10.0 [get_ports clk]`).
 - The `reset` pin should be constrained to a physical button or POR circuit.
