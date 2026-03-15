@@ -91,8 +91,231 @@ module riscv_core_top (
         .cnn_done (system_done)
     );
 
-    // [Instruction Fetch, Decode, Execute, MEM, WB logic for CPU persists...]
-    // For simplicity of the "Universal IP", the CPU is currently a separate entity in the hierarchy.
-    // If you want the CPU to also control the CNN, wrap both in an Interconnect.
+      // =========================================================================
+    // RISC-V 5-Stage Pipeline Integration
+    // =========================================================================
+
+    // --- Pipeline Control & Hazards ---
+    wire stall = 1'b0; // To be implemented if stalls needed
+    wire flush = 1'b0; // To be implemented for control hazards
+    
+    // --- IF Stage ---
+    wire [31:0] pc_if;
+    wire [31:0] instr_if;
+
+    pc u_pc (
+        .clk    (clk),
+        .reset  (reset),
+        .stall  (stall),
+        .pc_out (pc_if)
+    );
+
+    instruction_memory u_imem (
+        .addr        (pc_if),
+        .instruction (instr_if)
+    );
+
+    // --- IF/ID Pipeline Register ---
+    wire [31:0] pc_id;
+    wire [31:0] instr_id;
+
+    pipeline_register_if_id u_pipe_if_id (
+        .clk             (clk),
+        .reset           (reset),
+        .stall           (stall),
+        .flush           (flush),
+        .pc_in           (pc_if),
+        .instruction_in  (instr_if),
+        .pc_out          (pc_id),
+        .instruction_out (instr_id)
+    );
+
+    // --- ID Stage ---
+    // Decode Instruction Fields
+    wire [6:0]  opcode = instr_id[6:0];
+    wire [4:0]  rd     = instr_id[11:7];
+    wire [2:0]  funct3 = instr_id[14:12];
+    wire [4:0]  rs1    = instr_id[19:15];
+    wire [4:0]  rs2    = instr_id[24:20];
+    wire [6:0]  funct7 = instr_id[31:25];
+
+    // Immediate extraction (I-type default for simplicity in integration)
+    wire [31:0] imm_id = {{20{instr_id[31]}}, instr_id[31:20]};
+
+    // Control Unit Output Wires
+    wire       ctrl_reg_write_id;
+    wire       ctrl_alu_src_id;
+    wire [3:0] ctrl_alu_ctrl_id;
+    wire       ctrl_mem_read_id;
+    wire       ctrl_mem_write_id;
+    wire [1:0] ctrl_mem_to_reg_id;
+
+    control_unit u_ctrl (
+        .opcode     (opcode),
+        .funct3     (funct3),
+        .funct7     (funct7),
+        .reg_write  (ctrl_reg_write_id),
+        .alu_src    (ctrl_alu_src_id),
+        .alu_ctrl   (ctrl_alu_ctrl_id),
+        .mem_read   (ctrl_mem_read_id),
+        .mem_write  (ctrl_mem_write_id),
+        .mem_to_reg (ctrl_mem_to_reg_id)
+    );
+
+    // Register File Output Wires
+    wire [31:0] rs1_data_id;
+    wire [31:0] rs2_data_id;
+    
+    // Writeback wires (from WB stage)
+    wire        wb_reg_write;
+    wire [4:0]  wb_rd_addr;
+    wire [31:0] wb_rd_data;
+
+    register_file u_regfile (
+        .clk      (clk),
+        .reset    (reset),
+        .rs1_addr (rs1),
+        .rs2_addr (rs2),
+        .rs1_data (rs1_data_id),
+        .rs2_data (rs2_data_id),
+        .wr_en    (wb_reg_write),
+        .rd_addr  (wb_rd_addr),
+        .rd_data  (wb_rd_data)
+    );
+
+    // --- ID/EX Pipeline Register ---
+    wire        ctrl_reg_write_ex;
+    wire        ctrl_alu_src_ex;
+    wire [3:0]  ctrl_alu_ctrl_ex;
+    wire        ctrl_mem_read_ex;
+    wire        ctrl_mem_write_ex;
+    wire [1:0]  ctrl_mem_to_reg_ex;
+
+    wire [31:0] pc_ex;
+    wire [31:0] rs1_data_ex;
+    wire [31:0] rs2_data_ex;
+    wire [31:0] imm_ex;
+    wire [4:0]  rd_addr_ex;
+    wire [4:0]  rs1_addr_ex;
+    wire [4:0]  rs2_addr_ex;
+
+    pipeline_register_id_ex u_pipe_id_ex (
+        .clk            (clk),
+        .reset          (reset),
+        .stall          (stall),
+        .flush          (flush),
+        
+        .reg_write_in   (ctrl_reg_write_id),
+        .alu_src_in     (ctrl_alu_src_id),
+        .alu_ctrl_in    (ctrl_alu_ctrl_id),
+        .mem_read_in    (ctrl_mem_read_id),
+        .mem_write_in   (ctrl_mem_write_id),
+        .mem_to_reg_in  (ctrl_mem_to_reg_id),
+        
+        .pc_in          (pc_id),
+        .rs1_data_in    (rs1_data_id),
+        .rs2_data_in    (rs2_data_id),
+        .immediate_in   (imm_id),
+        .rd_addr_in     (rd),
+        .rs1_addr_in    (rs1),
+        .rs2_addr_in    (rs2),
+
+        .reg_write_out  (ctrl_reg_write_ex),
+        .alu_src_out    (ctrl_alu_src_ex),
+        .alu_ctrl_out   (ctrl_alu_ctrl_ex),
+        .mem_read_out   (ctrl_mem_read_ex),
+        .mem_write_out  (ctrl_mem_write_ex),
+        .mem_to_reg_out (ctrl_mem_to_reg_ex),
+
+        .pc_out         (pc_ex),
+        .rs1_data_out   (rs1_data_ex),
+        .rs2_data_out   (rs2_data_ex),
+        .immediate_out  (imm_ex),
+        .rd_addr_out    (rd_addr_ex),
+        .rs1_addr_out   (rs1_addr_ex),
+        .rs2_addr_out   (rs2_addr_ex)
+    );
+
+    // --- EX Stage ---
+    wire [31:0] alu_operand_a = rs1_data_ex; // Assuming no forwarding for now
+    wire [31:0] alu_operand_b = ctrl_alu_src_ex ? imm_ex : rs2_data_ex;
+    wire [31:0] alu_result_ex;
+    wire        alu_zero_ex;
+
+    alu u_alu (
+        .operand_a  (alu_operand_a),
+        .operand_b  (alu_operand_b),
+        .alu_ctrl   (ctrl_alu_ctrl_ex),
+        .alu_result (alu_result_ex),
+        .zero_flag  (alu_zero_ex)
+    );
+
+    // --- EX/MEM Pipeline Register ---
+    wire        ctrl_reg_write_mem;
+    wire        ctrl_mem_read_mem;
+    wire        ctrl_mem_write_mem;
+    wire [1:0]  ctrl_mem_to_reg_mem;
+
+    wire [31:0] alu_result_mem;
+    wire [31:0] rs2_data_mem;
+    wire [4:0]  rd_addr_mem;
+
+    pipeline_register_ex_mem u_pipe_ex_mem (
+        .clk            (clk),
+        .reset          (reset),
+        .stall          (stall),
+
+        .reg_write_in   (ctrl_reg_write_ex),
+        .mem_read_in    (ctrl_mem_read_ex),
+        .mem_write_in   (ctrl_mem_write_ex),
+        .mem_to_reg_in  (ctrl_mem_to_reg_ex),
+
+        .alu_result_in  (alu_result_ex),
+        .rs2_data_in    (rs2_data_ex),
+        .rd_addr_in     (rd_addr_ex),
+
+        .reg_write_out  (ctrl_reg_write_mem),
+        .mem_read_out   (ctrl_mem_read_mem),
+        .mem_write_out  (ctrl_mem_write_mem),
+        .mem_to_reg_out (ctrl_mem_to_reg_mem),
+
+        .alu_result_out (alu_result_mem),
+        .rs2_data_out   (rs2_data_mem),
+        .rd_addr_out    (rd_addr_mem)
+    );
+
+    // --- MEM Stage ---
+    // Memory interface not completely defined in files, mapping to dummy signals for now
+    // In a real SoC, this would connect to a Data cache or AXI Master.
+    wire [31:0] mem_read_data = 32'd0; 
+
+    // --- MEM/WB Pipeline Register ---
+    wire [1:0]  ctrl_mem_to_reg_wb;
+    wire [31:0] mem_data_wb;
+    wire [31:0] alu_result_wb;
+
+    pipeline_register_mem_wb u_pipe_mem_wb (
+        .clk            (clk),
+        .reset          (reset),
+
+        .reg_write_in   (ctrl_reg_write_mem),
+        .mem_to_reg_in  (ctrl_mem_to_reg_mem),
+        
+        .mem_data_in    (mem_read_data),
+        .alu_result_in  (alu_result_mem),
+        .rd_addr_in     (rd_addr_mem),
+
+        .reg_write_out  (wb_reg_write),
+        .mem_to_reg_out (ctrl_mem_to_reg_wb),
+
+        .mem_data_out   (mem_data_wb),
+        .alu_result_out (alu_result_wb),
+        .rd_addr_out    (wb_rd_addr)
+    );
+
+    // --- WB Stage ---
+    assign wb_rd_data = (ctrl_mem_to_reg_wb == 2'b01) ? mem_data_wb : alu_result_wb;
+
+endmodule
 
 endmodule
