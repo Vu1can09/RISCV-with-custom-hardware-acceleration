@@ -1,50 +1,76 @@
-# Processor-Controlled CNN Convolution Accelerator for Edge AI
+# Processor-Controlled LeNet-5 CNN Accelerator for Edge AI
 
 ## 1. Abstract
-This project proposes a hardware-efficient Convolutional Neural Network (CNN) Accelerator optimized for Edge AI applications. As deep learning models push the boundaries of computational demand, running CNNs strictly on general-purpose CPUs becomes inefficient in both power and performance. Our architecture resolves this limitation by introducing a custom feature map processing pipeline explicitly managed by a RISC-V processor over a Memory-Mapped I/O (MMIO) bus. The design utilizes purely digital RTL modules, enabling a streamlined architecture that clearly demonstrates feature map processing, sliding window mechanics, parallel MAC arrays, and local memory caching hierarchies.
+This project implements a hardware-efficient **LeNet-5 Convolutional Neural Network Accelerator** optimized for Edge AI applications. The architecture features a full multi-layer inference pipeline — Conv1 → ReLU → Pool → Conv2 → ReLU → Pool → FC — explicitly managed by a RISC-V processor over a Memory-Mapped I/O (MMIO) bus. The design utilizes pure synthesizable Verilog RTL modules with INT8 quantized inference, a DMA engine for high-throughput data transfer, and support for images up to 2048×2048 pixels.
 
 ## 2. Introduction
-Edge AI refers to deploying artificial intelligence algorithms locally on "edge" hardware devices natively, rather than relying on cloud computing. For computer vision tasks, CNNs are the predominant algorithm. However, executing CNNs requires immense parallel computations, specifically convolutions. General-purpose CPUs implement these via serial Multiply-Accumulate (MAC) loops, making real-time processing challenging under strict clock budgets. A dedicated hardware accelerator utilizes spatial computation (like parallel MAC arrays and line buffers) to significantly increase throughput and reduce latency, enabling complex Edge AI vision applications.
+Edge AI refers to deploying artificial intelligence algorithms locally on "edge" hardware devices, rather than relying on cloud computing. For computer vision tasks, CNNs are the predominant algorithm. However, executing CNNs requires immense parallel computations. A dedicated hardware accelerator utilizing spatial computation (parallel MAC arrays, line buffers, and streaming pooling) significantly increases throughput and reduces latency, enabling complex Edge AI vision applications on resource-constrained devices.
 
 ## 3. Problem Statement
-The primary limitations of standard software-based CPU CNN evaluation are poor localized memory reuse and sequential arithmetic limits. While single accelerator units exist, they often require complex central data movement per layer. Developing a decoupled hardware accelerator with an integrated Control FSM tightly coupled with a processor memory bus attempts to solve these bottlenecks by handling memory propagation natively, eliminating the need to stall processor software extensively over system busses.
+Standard software-based CPU CNN evaluation suffers from poor localized memory reuse and sequential arithmetic limits. Our multi-layer hardware accelerator with an integrated Control FSM, DMA engine, and streaming datapath solves these bottlenecks by handling memory propagation natively and processing multiple neural network layers autonomously.
 
 ## 4. Proposed Architecture
-The proposed architecture features a localized multi-stage hardware pipeline commanded by processor-writable registers. It processes multidimensional arrays incrementally. A central `cnn_controller` acts as the "Traffic Cop," managing internal data movement and accelerator scheduling. Inside the datapath, a `line_buffer` generator seamlessly catches image segments to maintain a constant stream of 3x3 pixel windows without reloading redundant data from main memory.
+The architecture features a localized multi-stage hardware pipeline commanded by processor-writable registers. A central `cnn_controller` FSM sequences the full inference pipeline: **DMA_LOAD → CONV1 → CONV2 → FC → DONE**. Each layer stage is encapsulated in a reusable `cnn_layer_pipeline` module chaining `conv3d_accelerator → relu → max_pool_2x2`.
 
 ## 5. System Architecture
-At a high level, the processor delegates a CNN workload by programming sizes, kernel weight paths, and triggering the accelerator.
 
-**Data Flow Pipeline:**
-`RISC-V Host -> MMIO Bus -> CNN Controller -> Memory Buffers -> 3D Conv Datapath`
+**Full Pipeline:**
+```text
+RISC-V Host → MMIO Bus → CNN Controller → DMA → Conv1+ReLU+Pool → Conv2+ReLU+Pool → FC → Class Scores
+```
 
-Inside the acceleration phase:
-1. Input pixels stream from local SRAM into the **Line Buffers**.
-2. The Line Buffers spit out a 3x3 receptive window every single clock cycle.
-3. The **MAC Array** natively computes the multiplication mathematics against the requested Kernels.
-4. An iterative **Channel Accumulator** loops over deep dimensions (like RGB or deep feature layers) and aggregates the partial sums.
-5. The processed pixel is written back out via the MMIO memory bridge.
+**Data Flow Detail:**
+1. The RISC-V CPU configures image dimensions, channel counts, filter counts, and DMA parameters via MMIO registers.
+2. The CPU triggers the pipeline with a single START pulse.
+3. The **DMA Controller** burst-transfers image data from external memory into local 64KB SRAM.
+4. **Layer 1 Pipeline**: Input pixels stream through line buffers → sliding window → MAC array → channel accumulator → ReLU → 2×2 max pooling.
+5. INT8 quantization converts 32-bit accumulator outputs back to 8-bit for intermediate SRAM storage.
+6. **Layer 2 Pipeline**: Reads intermediate feature maps and processes them through an identical Conv→ReLU→Pool chain.
+7. **FC Layer**: Reads the flattened pool output, performs sequential MAC operations against weight memory, and produces final class scores.
+8. The `DONE` flag is asserted, and the RISC-V core reads results via MMIO.
 
 ## 6. RTL Design
-We designed the architecture hierarchically through distinct component Verilog modules:
+The architecture is designed hierarchically through distinct component Verilog modules:
 
 - **`riscv_core_top`** & **`system_top`**: The integration wrappers bounding the processor MMIO interface together with the CNN hardware elements.
-- **`cnn_controller`**: Validates configuration, handles the overarching state machine (IDLE, MEM_LOAD, COMPUTE, WRITE_OUT), and routes signals to the datapath.
-- **`conv3d_accelerator`**: Top-level computation wrapper for a single convolution stage. 
-- **`mac_array`**: Represents spatial computation; combinatorially computes 9 multiplications and sums the outputs in parallel for a 3x3 kernel.
-- **`line_buffer`**: Caches overlapping rows such that a new 3x3 valid window is generated per clock cycle sequentially.
+- **`cnn_controller`**: Multi-layer FSM sequencing DMA → Conv1 → Conv2 → FC → Done.
+- **`cnn_layer_pipeline`**: Reusable wrapper chaining conv3d_accelerator → relu → max_pool_2x2.
+- **`conv3d_accelerator`**: Top-level computation wrapper for a single convolution stage (line buffer + sliding window + MAC array + channel accumulator).
+- **`relu`**: Combinational ReLU activation with zero latency.
+- **`max_pool_2x2`**: Streaming 2×2 max pooling with internal line buffer.
+- **`fc_layer`**: Sequential MAC fully connected layer for final classification.
+- **`dma_controller`**: Burst DMA engine for CPU-free memory block transfers.
+- **`mac_array`**: 9 parallel multipliers + adder tree for 3×3 kernel convolution.
+- **`line_buffer`**: BRAM-inferred row caching supporting up to 2048px wide images.
 
 ## 7. Simulation & Verification
-RTL verification was managed via completely automated scripts relying on **Icarus Verilog (`iverilog`)** and **GTKWave**. We cleanly test:
-1. **FSM Operation**: Polling register verification confirms transitioning from IDLE to processing when the system START register is pulsed.
-2. **Mathematical Correctness**: A Python verification subsystem utilizes NumPy to generate identically shaped multidimensional arrays, proving that the hardware datapath identically replicates the mathematics defined by the Python reference model.
-3. **Data Movement**: Top-level System Integration Testbenches force stimuli down the MMIO data buses, mimicking real firmware C-code executing down across the wires.
+RTL verification was managed via completely automated scripts relying on **Icarus Verilog (`iverilog`)** and **GTKWave**:
+1. **Syntax Check**: Full system compilation via `iverilog -o system_check.vvp rtl/*.v` — zero errors.
+2. **FSM Operation**: Polling register verification confirms multi-layer sequencing from IDLE through all stages to DONE.
+3. **Mathematical Correctness**: A Python verification subsystem (NumPy) generates identically shaped multidimensional arrays, proving the hardware datapath replicates the mathematics of the Python reference model.
+4. **System Integration**: Top-level testbenches force stimuli down the MMIO data buses, mimicking real firmware executing across the wires.
 
-## 8. Applications
-The proposed modular CNN framework acts as a foundational IP struct. It can be widely applied to:
-- **Computer Vision**: Live video object detection bounds checking, facial recognition processing locally without cloud latency.
-- **Signal Processing**: 1D and 2D signal denoising mapping.
-- **Autonomous Systems**: Real-time edge inference for small robotic navigation control loops.
+## 8. Performance Specifications
 
-## 9. Conclusion
-This project successfully designed and proved a high-speed, processor-controlled Convolution Accelerator subsystem. By decoupling the hardware arithmetic logic into discrete functional chunks—namely MAC arrays, Channel Accumulators, and Line-Buffer Sliding Windows—we demonstrated clear comprehension of spatial computer architecture scaling. Deploying a dedicated traffic controller with memory-mapped interfaces allows for effective, high-throughput hardware-software co-design implementations without physically stalling the primary CPU.
+| Metric | Value |
+|--------|-------|
+| Max Image Size | 2048 × 2048 pixels |
+| Max Channels | 255 |
+| Kernel Size | 3×3 (fixed) |
+| Parallel MACs/cycle | 9 |
+| Pixel/Weight Precision | 8-bit unsigned (INT8) |
+| Accumulator Precision | 32-bit signed |
+| Image SRAM | 64 KB |
+| Pipeline | Conv→ReLU→Pool × 2 + FC |
+| DMA | 1 word/cycle burst |
+
+## 9. Applications
+The modular multi-layer CNN accelerator can power:
+- **Computer Vision**: Real-time object detection, facial recognition, digit classification (MNIST/CIFAR-10)
+- **Signal Processing**: 1D/2D signal denoising, ECG anomaly detection
+- **Autonomous Systems**: Edge inference for robotic navigation
+- **Industrial IoT**: Defect detection, vibration classification, predictive maintenance
+- **Agriculture**: Crop health analysis from aerial imagery
+
+## 10. Conclusion
+This project successfully designed and proved a multi-layer, processor-controlled CNN Accelerator implementing a full LeNet-5 inference pipeline. By decomposing the hardware into discrete functional modules — MAC arrays, ReLU activations, max pooling units, channel accumulators, line-buffer sliding windows, DMA engines, and fully connected classifiers — we demonstrated scalable hardware-software co-design for real-world Edge AI applications. The design is fully synthesizable and ready for ASIC tapeout or FPGA deployment.
