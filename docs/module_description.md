@@ -1,39 +1,59 @@
-# Module Description
+# Module Description — Complete System
 
-## LeNet-5 Inference Pipeline
-
+## Full Inference Pipeline
 ```text
-Input Image → Conv1 → ReLU → Pool → Conv2 → ReLU → Pool → FC → Class Scores
-```
-
-Each convolution layer is encapsulated in `cnn_layer_pipeline.v`:
-```text
-pixel_in → [line_buffer → sliding_window → mac_array → channel_accumulator] → ReLU → MaxPool → pixel_out
+Input → [ZeroPad] → Conv1 → BN → ReLU/Sigmoid → Pool → Conv2 → BN → ReLU/Sigmoid → Pool → FC → Activation → Output
+         ↑ skip ─────────────────────────────────┘
 ```
 
 ---
 
 ## Datapath Components
 
-1. **`mac_array.v`**: The core math unit. 9 pipelined multipliers computing `a[i] * w[i]` followed by an adder tree accumulating them into a single product.
-2. **`line_buffer.v`**: Dual BRAM-inferred FIFOs maintaining historical row vectors. Supports up to 2048px wide images.
-3. **`sliding_window.v`**: Receives 3 column vectors every clock, shifts previous variables right, and exposes a flattened vector of 9 simultaneous spatial variables to the MAC Array.
-4. **`channel_accumulator.v`**: Maintains a running tally of intermediate MAC array outputs. Asserts `clear` at the completion of spatial tensor boundaries.
-5. **`relu.v`**: Combinational ReLU activation. Clamps negative signed values to zero with zero latency.
-6. **`max_pool_2x2.v`**: Streaming 2×2 max pooling with internal line buffer. Halves spatial dimensions (width and height).
-7. **`fc_layer.v`**: Sequential MAC fully connected layer. Reads flattened features and weights, multiplies/accumulates, produces output class scores.
+| Module | Description |
+|--------|-------------|
+| `mac_array.v` | 9 pipelined multipliers + adder tree for 3×3 convolution |
+| `multi_filter_mac.v` | N-way parallel MAC bank for N× filter throughput |
+| `line_buffer.v` | Dual BRAM FIFOs, up to 2048px wide |
+| `sliding_window.v` | 3×3 shift-register window generating 9 pixels/cycle |
+| `channel_accumulator.v` | 32-bit running tally across depth channels |
+| `relu.v` | Combinational ReLU (clamp negative → 0) |
+| `max_pool_2x2.v` | Streaming 2×2 max pooling with line buffer |
+| `batch_norm.v` | 2-stage pipelined BN: `y = (x-mean)*scale + offset` |
+| `activation_lut.v` | 256-entry sigmoid LUT approximation |
+| `skip_add.v` | Element-wise residual add (ResNet-style) |
+| `zero_pad.v` | Configurable zero-padding for dimension preservation |
+| `stride_controller.v` | Pixel decimation for strided convolution/pooling |
+| `fc_layer.v` | Sequential MAC fully connected classification layer |
 
-## Control and Wrappers
+## Memory Modules
 
-1. **`cnn_layer_pipeline.v`**: Reusable single-layer wrapper chaining `conv3d_accelerator → relu → max_pool_2x2`.
-2. **`conv3d_accelerator.v`**: The wrapper that organizes `line_buffer`, `sliding_window`, `mac_array`, and `channel_accumulator` into an uninterrupted flow of data.
-3. **`cnn_controller.v`**: Multi-layer FSM sequencing `DMA_LOAD → CONV1 → CONV2 → FC → DONE`. Also retains legacy single-layer states for backward compatibility.
-4. **`cnn_register_interface.v`**: Extended MMIO address map with 17 registers covering image config, DMA, Layer 2, and FC parameters.
-5. **`dma_controller.v`**: Burst DMA engine for CPU-free memory transfers between external memory and local CNN SRAM.
-6. **`riscv_core_top.v`**: 5-stage pipelined RISC-V soft-core driving instruction sequences and memory-mapped reads/writes to the CNN.
-7. **`system_top.v`**: The primary ASIC/FPGA synthesis wrapper tying the processor and CNN datapath to top-level pins.
+| Module | Description |
+|--------|-------------|
+| `feature_map_ram.v` | 64KB dual-port SRAM for image/feature maps (×3 instances) |
+| `weight_ram.v` | 72-bit wide SRAM for 3×3 conv kernel weights |
+| `fc_weight_ram.v` | 16K-entry SRAM for FC layer weights (MMIO writable) |
+| `fc_bias_ram.v` | 16-entry SRAM for FC bias values (MMIO writable) |
+| `output_result_ram.v` | 16-entry SRAM for FC scores (MMIO readable) |
+| `image_buffer.v` | 4KB staging buffer |
 
-## Memory Models
-- **`feature_map_ram.v`**: 64KB dual-port SRAM for image data and intermediate feature maps (instantiated 3× for Layer 1 input, inter-layer buffer, and FC input buffer).
-- **`image_buffer.v`**: 4KB image staging buffer.
-- **`weight_ram.v`**: 72-bit wide dual-port SRAM for 3×3 kernel weights (9 × 8-bit).
+## Control & Infrastructure
+
+| Module | Description |
+|--------|-------------|
+| `conv3d_accelerator.v` | Single-layer conv wrapper (LB + SW + MAC + CA) |
+| `cnn_layer_pipeline.v` | Reusable stage: Conv3D → ReLU → MaxPool |
+| `cnn_controller.v` | Multi-layer FSM: DMA → L1 → L2 → FC → DONE |
+| `cnn_register_interface.v` | 30+ MMIO registers for full system config |
+| `dma_controller.v` | Simple burst DMA for local memory transfers |
+| `axi_dma_master.v` | AXI4 burst master for external DDR access |
+| `axi4_lite_slave.v` | AXI4-Lite slave wrapper for ARM/SoC integration |
+| `clock_gate.v` | Latch-based ICG cell for per-layer power gating |
+
+## System Wrappers
+
+| Module | Description |
+|--------|-------------|
+| `edge_ai_cnn_peripheral.v` | Top-level CNN peripheral with full pipeline |
+| `riscv_core_top.v` | 5-stage RV32I CPU with MMIO CNN interface |
+| `system_top.v` | ASIC/FPGA synthesis top module |

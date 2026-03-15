@@ -1,164 +1,107 @@
-# Module Descriptions
+# Module Descriptions — Detailed Reference
 
-Detailed signal-level descriptions for each RTL module in the RISC-V 5-stage pipeline processor.
-
----
-
-## pc.v — Program Counter
-
-Increments by 4 each cycle. Holds current value when pipeline is stalled.
-
-| Signal   | Direction | Width | Description                     |
-|----------|-----------|-------|---------------------------------|
-| clk      | Input     | 1     | System clock                    |
-| reset    | Input     | 1     | Synchronous reset (active high) |
-| stall    | Input     | 1     | Pipeline stall signal           |
-| pc_out   | Output    | 32    | Current program counter value   |
+## Full Inference Pipeline
+```text
+Input → [ZeroPad] → Conv1 → BN → ReLU/Sigmoid → Pool → Conv2 → BN → ReLU/Sigmoid → Pool → FC → Sigmoid → Class Scores
+         ↑ skip ─────────────────────────────────┘      ↑ skip ────────────────────────┘
+```
 
 ---
 
-## instruction_memory.v — Instruction Memory
+## Datapath Components
 
-ROM loaded from `sim/instructions.mem`. Word-addressed (byte addr >> 2).
+### `mac_array.v` — Parallel MAC Array
+9 pipelined multipliers computing `pixel[i] * weight[i]` followed by an adder tree. 3-stage pipeline: register inputs → multiply → accumulate. Produces one 20-bit MAC result per valid cycle.
 
-| Signal      | Direction | Width | Description           |
-|-------------|-----------|-------|-----------------------|
-| addr        | Input     | 32    | Byte address          |
-| instruction | Output    | 32    | Fetched instruction   |
+### `multi_filter_mac.v` — Multi-Filter Parallel Bank
+Uses `generate` to instantiate N independent MAC arrays, each computing a different output filter simultaneously. All lanes share the same pixel window but have separate weight inputs, providing N× throughput.
 
----
+### `line_buffer.v` — Row Caching
+Dual BRAM-inferred FIFOs maintaining historical row vectors. Supports up to 2048px wide images with 11-bit write pointers and wrap-around logic.
 
-## register_file.v — Register File
+### `sliding_window.v` — 3×3 Spatial Window
+Receives 3 column vectors every clock, shifts previous variables right, and exposes a flattened 72-bit vector (9×8-bit pixels) to the MAC Array.
 
-32×32-bit register file. x0 hardwired to zero.
+### `channel_accumulator.v` — Depth Accumulation
+Maintains a running 32-bit tally of partial MAC results across the depth dimension (e.g., RGB channels). Asserts clear at tensor boundaries.
 
-| Signal   | Direction | Width | Description                     |
-|----------|-----------|-------|---------------------------------|
-| clk      | Input     | 1     | System clock                    |
-| reset    | Input     | 1     | Reset (clears all regs)         |
-| rs1_addr | Input     | 5     | Source register 1 address       |
-| rs2_addr | Input     | 5     | Source register 2 address       |
-| rs1_data | Output    | 32    | Source register 1 data          |
-| rs2_data | Output    | 32    | Source register 2 data          |
-| wr_en    | Input     | 1     | Write enable                    |
-| rd_addr  | Input     | 5     | Destination register address    |
-| rd_data  | Input     | 32    | Write-back data                 |
+### `relu.v` — ReLU Activation
+Combinational: `data_out = data_in[MSB] ? 0 : data_in`. Zero latency, zero area impact.
 
----
+### `max_pool_2x2.v` — 2×2 Max Pooling
+Streaming pooling with internal line buffer. Processes column pairs and row pairs, storing intermediate maximums. Halves both width and height.
 
-## alu.v — ALU
+### `batch_norm.v` — Batch Normalization
+2-stage pipeline: Stage 1 centers the input (`x - mean`), Stage 2 scales and offsets (`centered * scale + offset`). Uses Q8.8 fixed-point for the scale factor. Pre-computed (frozen BN) parameters loaded via MMIO.
 
-4-operation ALU with zero flag.
+### `activation_lut.v` — Sigmoid/Softmax LUT
+256-entry piecewise-linear sigmoid approximation. Input is shifted from signed [-128,127] to unsigned [0,255] for LUT indexing. Supports bypass mode for when ReLU is preferred.
 
-| Signal     | Direction | Width | Description           |
-|------------|-----------|-------|-----------------------|
-| operand_a  | Input     | 32    | First operand         |
-| operand_b  | Input     | 32    | Second operand        |
-| alu_ctrl   | Input     | 4     | Operation selector    |
-| alu_result | Output    | 32    | Computation result    |
-| zero_flag  | Output    | 1     | Result == 0           |
+### `skip_add.v` — Residual Skip Connection
+Element-wise addition between main path (layer output) and skip path (buffered layer input). Both streams must be synchronized. Enables ResNet-style architectures.
 
-ALU operations: `0000`=ADD, `0001`=SUB, `0010`=AND, `0011`=OR.
+### `zero_pad.v` — Zero-Padding
+Inserts configurable rows/columns of zeros around the input stream. For pad_size=1 with 3×3 kernel, output size = input size (same convolution). Generates backpressure to upstream via `ready_out`.
+
+### `stride_controller.v` — Stride Decimation
+Accepts a pixel stream and passes every Nth pixel in both X and Y dimensions. Configurable stride (1, 2, or 4). Reduces output dimensions by the stride factor.
+
+### `fc_layer.v` — Fully Connected Layer
+Sequential MAC engine for classification. For each output neuron: `score[j] = Σ(feature[i] × weight[j][i]) + bias[j]`. Reads features, multiplies against weight memory, accumulates, and emits class scores.
 
 ---
 
-## control_unit.v — Control Unit
+## Memory Modules
 
-Decodes opcode and generates pipeline control signals.
+### `feature_map_ram.v` — Image/Feature Map SRAM
+Dual-port synchronous RAM. Port A for writes, Port B for reads. Used 3× in the system: Layer 1 input, inter-layer buffer, and FC input buffer. 64KB capacity (16-bit address).
 
-| Signal      | Direction | Width | Description                        |
-|-------------|-----------|-------|------------------------------------|
-| opcode      | Input     | 7     | Instruction opcode field           |
-| funct3      | Input     | 3     | Function code 3                    |
-| funct7      | Input     | 7     | Function code 7                    |
-| reg_write   | Output    | 1     | Register write enable              |
-| alu_src     | Output    | 1     | ALU source (0=rs2, 1=imm)         |
-| alu_ctrl    | Output    | 4     | ALU operation                      |
-| mem_read    | Output    | 1     | Memory read enable                 |
-| mem_write   | Output    | 1     | Memory write enable                |
-| mem_to_reg  | Output    | 2     | WB source (00=ALU, 01=mem, 10=acc) |
-| accel_start | Output    | 1     | Start convolution accelerator      |
+### `fc_weight_ram.v` — FC Weight SRAM
+Dual-port RAM with 14-bit addressing (16,384 entries). Port A is MMIO-writable by the CPU for loading trained weights. Port B is read by the FC layer during inference.
 
----
+### `fc_bias_ram.v` — FC Bias SRAM
+Small dual-port RAM (16 entries × 32-bit). One bias per output neuron. MMIO-writable via a dedicated address range.
 
-## Pipeline Register Modules
+### `output_result_ram.v` — Classification Score SRAM
+Stores FC output scores (16 entries × 32-bit). Written by hardware during inference, readable by the CPU via MMIO registers 0x80–0xBC.
 
-### pipeline_register_if_id.v
-
-| Signal          | Direction | Width | Description                |
-|-----------------|-----------|-------|----------------------------|
-| stall           | Input     | 1     | Hold values                |
-| flush           | Input     | 1     | Insert NOP bubble          |
-| pc_in/out       | I/O       | 32    | Program counter            |
-| instruction_in/out | I/O    | 32    | Instruction word           |
-
-### pipeline_register_id_ex.v
-
-Passes all control signals + register data + immediate + addresses.
-
-### pipeline_register_ex_mem.v
-
-Passes ALU result + write data + accelerator result + control signals.
-
-### pipeline_register_mem_wb.v
-
-Passes memory data + ALU result + accelerator result for writeback mux.
+### `weight_ram.v` — Conv Kernel Weight SRAM
+72-bit wide (9 × 8-bit weights per entry). Stores conv kernel weights for both Layer 1 and Layer 2.
 
 ---
 
-## mac_unit.v — Multiply-Accumulate Unit
+## Control & Infrastructure
 
-Single-cycle MAC: `acc += a × b`.
+### `cnn_controller.v` — Multi-Layer FSM
+Sequences the full pipeline: `IDLE → DMA_LOAD → CONV1_RUN → CONV1_WAIT → CONV2_RUN → CONV2_WAIT → FC_RUN → FC_WAIT → DONE`. Each stage asserts a start signal and waits for the corresponding done signal. Also retains legacy single-layer states for backward compatibility.
 
-| Signal      | Direction | Width | Description                |
-|-------------|-----------|-------|----------------------------|
-| clk         | Input     | 1     | System clock               |
-| reset       | Input     | 1     | Reset accumulator          |
-| clear       | Input     | 1     | Clear accumulator to 0     |
-| enable      | Input     | 1     | Enable MAC operation       |
-| operand_a   | Input     | 8     | Input value (pixel)        |
-| operand_b   | Input     | 8     | Kernel weight              |
-| accumulator | Output    | 32    | Accumulated result         |
+### `cnn_register_interface.v` — MMIO Register Map (30+ registers)
+Extended register interface covering: image config (0x00–0x20), DMA config (0x24–0x30), Layer 2 config (0x34–0x38), FC config (0x3C–0x40), stride/pad (0x44–0x48), batch norm params (0x4C–0x54), activation mode (0x58), power gate config (0x5C), skip enables (0x60), AXI-DMA direction (0x64), and result readback (0x80–0xBC).
 
----
+### `dma_controller.v` — Simple Burst DMA
+FSM-based sequential DMA: READ → WRITE cycle for each word. One word per clock. Configurable source, destination, and transfer length.
 
-## convolution_accelerator.v — Convolution Engine
+### `axi_dma_master.v` — AXI4 Burst DMA Master
+Full AXI4 burst master interface for DDR access. Supports both read (DDR→SRAM) and write (SRAM→DDR) with configurable burst length (up to 16 beats). Enables high-bandwidth data transfer for large images.
 
-FSM-driven 3×3 convolution using MAC unit.
+### `axi4_lite_slave.v` — AXI4-Lite Slave Wrapper
+Standard AXI4-Lite slave translating AXI read/write transactions to simple `wen/ren/addr/wdata` signals. Enables plug-and-play integration with ARM Zynq, SoC interconnects, and AXI ecosystems.
 
-| Signal | Direction | Width | Description                    |
-|--------|-----------|-------|--------------------------------|
-| clk    | Input     | 1     | System clock                   |
-| reset  | Input     | 1     | Reset FSM and buffers          |
-| start  | Input     | 1     | Begin convolution              |
-| done   | Output    | 1     | Computation complete           |
-| result | Output    | 32    | Final convolution dot product  |
-
-FSM states: IDLE (00) → COMPUTE (01) → DONE (10) → IDLE.
+### `clock_gate.v` — Integrated Clock Gating Cell
+Latch-based ICG for per-layer clock gating. Negative-edge latch prevents glitches. Test mode bypass for DFT. Controls power for Layer 1, Layer 2, FC, and DMA independently.
 
 ---
 
-## custom_instruction_decoder.v — Custom Instruction Decoder
+## System Wrappers
 
-Detects opcode `0001011` and generates accelerator control.
+### `cnn_layer_pipeline.v` — Reusable Layer Stage
+Chains `conv3d_accelerator → relu → max_pool_2x2` into a clean streaming pipeline. Instantiated twice for Layer 1 and Layer 2.
 
-| Signal          | Direction | Width | Description                |
-|-----------------|-----------|-------|----------------------------|
-| opcode          | Input     | 7     | Instruction opcode         |
-| accel_done      | Input     | 1     | Accelerator done flag      |
-| accel_result    | Input     | 32    | Accelerator output         |
-| accel_start     | Output    | 1     | Trigger accelerator        |
-| is_custom_instr | Output    | 1     | Custom instruction flag    |
-| custom_result   | Output    | 32    | Result for pipeline        |
+### `edge_ai_cnn_peripheral.v` — CNN Peripheral (Top)
+The master integration module containing the full LeNet-5 pipeline with all 12 improvements. Instantiates register interface, controller, DMA, clock gates, two layer pipelines, batch norm, skip connections, FC layer with real weight/bias RAMs, sigmoid activation, and output result RAM.
 
----
+### `riscv_core_top.v` — 5-Stage RISC-V CPU
+Complete RV32I processor with data forwarding, hazard detection, and MMIO CNN interface. The `system_done` output prevents synthesis optimization.
 
-## riscv_core_top.v — Top-Level Integration
-
-Wires all pipeline stages, registers, forwarding, hazard detection, and accelerator.
-
-**Key features:**
-- **Data forwarding** from EX/MEM and MEM/WB to EX-stage operands
-- **Load-use hazard** stall: inserts 1-cycle bubble when EX-stage load destination matches ID-stage source
-- **Embedded data memory** (256 words) for MEM stage
-- **Debug monitor** printing register writes during simulation
+### `system_top.v` — Synthesis Top Module
+ASIC/FPGA wrapper exposing only `clk`, `reset`, and `done`.
