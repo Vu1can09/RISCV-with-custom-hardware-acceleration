@@ -52,7 +52,15 @@ module max_pool_2x2 #(
     wire signed [DATA_WIDTH-1:0] h_max = (col_pair_max > pixel_in) ? col_pair_max : pixel_in;
 
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n || start) begin
+        if (!rst_n) begin
+            col_cnt        <= 0;
+            row_cnt        <= 0;
+            col_pair_max   <= 0;
+            col_pair_valid <= 0;
+            buf_wr_addr    <= 0;
+            pixel_out      <= 0;
+            valid_out      <= 0;
+        end else if (start) begin
             col_cnt        <= 0;
             row_cnt        <= 0;
             col_pair_max   <= 0;
