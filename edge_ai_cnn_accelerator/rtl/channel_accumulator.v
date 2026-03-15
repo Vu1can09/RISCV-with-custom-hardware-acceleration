@@ -24,11 +24,11 @@ module channel_accumulator #(
             valid_out <= 0;
         end else if (en) begin
             if (clear) begin
-                sum_reg <= mac_value;
+                sum_reg <= {{(OUT_WIDTH-IN_WIDTH){mac_value[IN_WIDTH-1]}}, mac_value};
                 accum_out <= sum_reg; // Output the finalized value from previous sequence
                 valid_out <= 1'b1;
             end else begin
-                sum_reg <= sum_reg + mac_value;
+                sum_reg <= sum_reg + {{(OUT_WIDTH-IN_WIDTH){mac_value[IN_WIDTH-1]}}, mac_value};
                 valid_out <= 1'b0;
             end
         end else begin

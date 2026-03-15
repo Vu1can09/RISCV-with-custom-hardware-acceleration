@@ -24,13 +24,20 @@ module cnn_controller_tb;
 
     always #5 clk = ~clk;
 
+    // Latch the done pulse (it is only high for 1 clock cycle)
+    reg done_seen;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) done_seen <= 0;
+        else if (done) done_seen <= 1;
+    end
+
     initial begin
         // Configurable Waveform Dumping
         if (DEBUG_LEVEL > 0) begin
             $dumpfile("sim_out/waveforms/cnn_controller.fst");
-            if (DEBUG_LEVEL == 1)      $dumpvars(1, cnn_controller_tb); // Top-level only
-            else if (DEBUG_LEVEL == 2) $dumpvars(0, cnn_controller_tb.uut); // Accelerator/uut only
-            else                       $dumpvars(0, cnn_controller_tb); // Full debug dump
+            if (DEBUG_LEVEL == 1)      $dumpvars(1, cnn_controller_tb);
+            else if (DEBUG_LEVEL == 2) $dumpvars(0, cnn_controller_tb.uut);
+            else                       $dumpvars(0, cnn_controller_tb);
         end
         
         clk = 0;
@@ -39,19 +46,34 @@ module cnn_controller_tb;
         mac_done = 0;
         image_done = 0;
         
+        // Release reset
         #20 rst_n = 1;
-        #10 start = 1;
-        #10 start = 0;
         
-        // Proceed through state machines
-        #20 mac_done = 1; // Mac completes
-        #10 mac_done = 0;
+        // Pulse start
+        @(posedge clk); #1 start = 1;
+        @(posedge clk); #1 start = 0;
         
-        #20 image_done = 1; // Just a quick cycle
-        #10 image_done = 0;
+        // FSM path: IDLE -> LOAD_WINDOW -> MULTIPLY -> ACCUMULATE
+        // Wait for ACCUMULATE, then assert mac_done
+        @(posedge clk); // LOAD_WINDOW
+        @(posedge clk); // MULTIPLY
+        #1 mac_done = 1;
+        @(posedge clk); // ACCUMULATE sees mac_done -> WRITE_OUTPUT
+        #1 mac_done = 0;
         
-        #30;
-        if (done) $display("PASS: CNN Controller finished sequence.");
+        // FSM path: WRITE_OUTPUT -> NEXT_PIXEL
+        // Assert image_done before NEXT_PIXEL samples it
+        @(posedge clk); // WRITE_OUTPUT
+        #1 image_done = 1;
+        @(posedge clk); // NEXT_PIXEL sees image_done -> DONE_STATE
+        #1 image_done = 0;
+        
+        // Wait for DONE_STATE
+        @(posedge clk); // DONE_STATE (done=1 for this cycle)
+        @(posedge clk); // Back to IDLE
+        
+        #5;
+        if (done_seen) $display("PASS: CNN Controller finished sequence.");
         else $display("FAIL: CNN Controller did not finish.");
         
         #10 $finish;

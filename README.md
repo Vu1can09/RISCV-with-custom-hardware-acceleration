@@ -22,7 +22,28 @@ By designing a **Hardware Accelerator**, we can utilize hundreds of parallel mul
 ## 📐 System Architecture
 
 ### 1. Top-Level Integration
-The system centers around the RISC-V Controller dispatching configuration and execution commands to the Edge AI subsystem via a Memory-Mapped I/O (MMIO) bus.
+The system centers around the RISC-V Controller acting as the "Brain", dispatching configuration and execution commands downstream to a multi-stage Edge AI subsystem via a Memory-Mapped I/O (MMIO) bus.
+
+```text
+┌─────────────────────────┐
+│       RISC-V Core       │
+│        ("Brain")        │
+└───────────┬─────────────┘
+            │ MMIO Bus
+            ▼
+┌─────────────────────────┐
+│     CNN Controller      │
+│  (Config & Scheduling)  │
+└───────────┬─────────────┘
+            │ Datapath
+      ┌─────┼─────┐
+      ▼     ▼     ▼
+  ┌──────┐┌──────┐┌──────┐
+  │ Conv ││ Conv ││ Conv │
+  │ Unit ││ Unit ││ Unit │
+  │  1   ││  2   ││  3   │
+  └──────┘└──────┘└──────┘
+```
 
 ![Edge AI System Flowchart](diagrams/system_flowchart.png)
 

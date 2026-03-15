@@ -1,70 +1,67 @@
 # Design Methodology
 
-## Algorithm-to-Hardware Flow
+## Hardware/Software Co-Design Flow
 
-This project follows a structured design methodology from algorithm modeling through RTL verification.
+This project follows a structured design methodology that inherently compares high-level software models against rigorous hardware-level Register-Transfer Logic (RTL).
 
 ```
 ┌──────────────────┐
-│  1. Algorithm     │   Python/NumPy convolution reference model
-│     Modeling      │   → Defines correct behavior
+│  1. Python Math   │   NumPy convolution reference model
+│     Modeling      │   → Defines correct spatial multi-dimensional math
 └────────┬─────────┘
          ▼
 ┌──────────────────┐
-│  2. RTL Design    │   Verilog modules: MAC unit, accelerator FSM,
-│                   │   pipeline stages, control unit
+│  2. RTL Design    │   Verilog modules: MAC Array, Line Buffers,
+│                   │   FSM Control Unit, MMIO Interface
 └────────┬─────────┘
          ▼
 ┌──────────────────┐
-│  3. Integration   │   Top-level module wiring all stages,
-│                   │   custom instruction decoder, forwarding
+│  3. Integration   │   Top-level module wiring all datapath stages,
+│                   │   binding to the CPU via AXI/MMIO memory
 └────────┬─────────┘
          ▼
 ┌──────────────────┐
-│  4. Simulation    │   Icarus Verilog compilation + VVP execution
-│                   │   → VCD waveform generation
+│  4. Automated     │   `run_simulation.sh` regression scripts
+│     Testing       │   → Compiles to highly compressed `.fst`
 └────────┬─────────┘
          ▼
 ┌──────────────────┐
-│  5. Verification  │   Compare Verilog output vs. Python reference
-│                   │   → GTKWave waveform inspection
+│  5. Verification  │   Compare Icarus Verilog output via GTKWave vs.
+│                   │   the Python print statements.
 └──────────────────┘
 ```
 
 ## Phase Details
 
 ### Phase 1: Algorithm Modeling
-- Implement 2D convolution in Python using NumPy
-- Generate golden reference outputs
-- Export test vectors in hex format for Verilog `$readmemh`
+- Implement multi-dimensional convolution arithmetic in pure Python via NumPy (`cnn_reference_model.py`).
+- Generate dynamic matrix test dimensions to act as the Ground Truth.
+- Prove algorithms scale correctly independent of bit-width precision before writing any silicon description.
 
 ### Phase 2: RTL Design
-- Design individual modules with clean interfaces
-- Follow synthesizable RTL coding style
-- Ensure each module is independently testable
+- Design individual hardware IP blocks (e.g. `mac_array.v`).
+- Parameterize components using `generate` blocks and scalable `#()` macro parameters to test different precision levels smoothly.
 
-### Phase 3: Integration
-- Wire all pipeline stages with pipeline registers
-- Add hazard detection and data forwarding
-- Integrate convolution accelerator at Execute stage
-- Define custom instruction opcode and control signals
+### Phase 3: Hardware Integration
+- Mount the deeply pipelined CNN logic over a flexible state machine controller (`cnn_controller.v`).
+- Bind the controller logic specifically to the Memory-Mapped I/O read/write operations mimicking a processor's memory load/stores.
 
-### Phase 4: Simulation
-- Compile with Icarus Verilog (`iverilog`)
-- Run with VVP (`vvp`)
-- Dump waveforms to VCD format
+### Phase 4: Automated Simulation
+- A central bash script (`scripts/run_simulation.sh`) completely manages compilation pipelines.
+- Code is compiled sequentially using Icarus Verilog (`iverilog`).
+- Execute generated targets sequentially with the discrete execution engine (`vvp`).
+- Dump all timing/signal changes to highly compressed Fast Signal Transfer (`.fst`) blocks to preserve SSD storage natively spanning gigabytes of toggles.
 
-### Phase 5: Verification
-- Automated testbench self-checks with `$display` pass/fail
-- Visual waveform inspection in GTKWave
-- Python validation script comparing outputs
+### Phase 5: Verification & Self-Checking
+- Automated testbench wrappers provide localized validation and `$display` explicit `PASS:` or `FAIL:` states.
+- System Integration level benches test specific memory array addresses against Python Ground Truth calculations.
 
-## Tools
+## Core Toolchain
 
-| Tool           | Purpose                          |
-|----------------|----------------------------------|
-| Icarus Verilog | Open-source Verilog simulator    |
-| VVP            | Simulation runtime engine        |
-| GTKWave        | Waveform viewer                  |
-| Python + NumPy | Algorithm modeling & validation  |
-| VS Code/Cursor | Code editor and development IDE  |
+| Tool           | Purpose                          | Integration Level |
+|----------------|----------------------------------|-------------------|
+| Icarus Verilog | Open-source Verilog Synthesizer  | Simulation        |
+| VVP            | Simulation runtime engine       | Simulation        |
+| GTKWave        | `.fst` visualizer / debugging   | Verification      |
+| Python + NumPy | Multi-dimensional Math Baseline  | Algorithmic Truth |
+| Bash           | Automated regression suites      | Continuous CI/CD  |

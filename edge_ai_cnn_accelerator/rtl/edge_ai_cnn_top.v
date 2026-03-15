@@ -35,7 +35,6 @@ module edge_ai_cnn_top (
     // -------------------------------------------------------------------------
     // Reg/Controller Signals
     // -------------------------------------------------------------------------
-    wire [31:0] img_addr, wt_addr, fm_addr;
     wire [7:0]  img_w, img_h, channels, k_size, num_f;
     wire start_req;
     wire conv_done;
@@ -49,9 +48,9 @@ module edge_ai_cnn_top (
         .ren          (rv_mem_ren),
         .rdata        (rv_mem_rdata),
         .ready        (rv_mem_ready),
-        .image_addr   (img_addr),
-        .weight_addr  (wt_addr),
-        .feature_addr (fm_addr),
+        .image_addr   (_unused_img_addr),
+        .weight_addr  (_unused_wt_addr),
+        .feature_addr (_unused_fm_addr),
         .input_width  (img_w),
         .input_height (img_h),
         .channels     (channels),
@@ -89,14 +88,20 @@ module edge_ai_cnn_top (
         .img_width      (img_w),
         .img_height     (img_h),
         .num_channels   (channels),
-        .pixel_valid_in (1'b1), // Connect to RAM
-        .pixel_in       (8'h01),// Connect to image buffer read
-        .weights_valid  (1'b1), // Connect to RAM
+        .pixel_valid_in (load_win),    // Driven by controller
+        .pixel_in       (8'h01),       // Connect to image buffer read
+        .weights_valid  (en_mac),      // Driven by controller
         .weight_in      (72'h0101010101010101),
         .pixel_out      (fm_out_data),
         .out_valid      (fm_out_valid),
-        .done           (system_done) // Connect to local done
+        .done           (system_done)  // Connect to local done
     );
+
+    // Unused output sinks (prevent synthesis warnings)
+    // k_size, num_f, wr_out, nxt_pix are reserved for future multi-layer support
+    wire [31:0] _unused_img_addr, _unused_wt_addr, _unused_fm_addr;
+    wire _unused = &{1'b0, k_size, num_f, wr_out, nxt_pix, fm_out_data, fm_out_valid,
+                     _unused_img_addr, _unused_wt_addr, _unused_fm_addr, 1'b0};
 
     // Memory stubs are abstracted out from the top for simplicity in basic test.
     // In a full implementation, you connect Memory to Conv here.

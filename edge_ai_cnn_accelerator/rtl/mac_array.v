@@ -21,7 +21,6 @@ module mac_array (
     reg signed [7:0] px_reg [0:8];
     reg signed [7:0] wt_reg [0:8];
     reg signed [15:0] mult_res [0:8];
-    reg signed [19:0] acc_sum;
     reg valid_stg1, valid_stg2;
 
     always @(posedge clk or negedge rst_n) begin
@@ -31,7 +30,6 @@ module mac_array (
                 wt_reg[i] <= 0;
                 mult_res[i] <= 0;
             end
-            acc_sum <= 0;
             mac_out <= 0;
             valid_stg1 <= 0;
             valid_stg2 <= 0;
@@ -60,9 +58,9 @@ module mac_array (
             
             // Stage 3: Accumulate 9 products
             if (valid_stg2) begin
-                mac_out <= mult_res[0] + mult_res[1] + mult_res[2] +
-                           mult_res[3] + mult_res[4] + mult_res[5] +
-                           mult_res[6] + mult_res[7] + mult_res[8];
+                mac_out <= {{4{mult_res[0][15]}}, mult_res[0]} + {{4{mult_res[1][15]}}, mult_res[1]} + {{4{mult_res[2][15]}}, mult_res[2]} +
+                           {{4{mult_res[3][15]}}, mult_res[3]} + {{4{mult_res[4][15]}}, mult_res[4]} + {{4{mult_res[5][15]}}, mult_res[5]} +
+                           {{4{mult_res[6][15]}}, mult_res[6]} + {{4{mult_res[7][15]}}, mult_res[7]} + {{4{mult_res[8][15]}}, mult_res[8]};
                 valid_out <= 1'b1;
             end else begin
                 valid_out <= 1'b0;

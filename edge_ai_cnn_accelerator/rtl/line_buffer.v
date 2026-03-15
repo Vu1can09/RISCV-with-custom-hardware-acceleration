@@ -22,9 +22,8 @@ module line_buffer #(
     reg [DATA_WIDTH-1:0] fifo_row1 [0:MAX_IMAGE_WIDTH-1];
     reg [DATA_WIDTH-1:0] fifo_row2 [0:MAX_IMAGE_WIDTH-1];
     
-    reg [7:0] wr_ptr;
-    reg [7:0] rd_ptr;
-    reg state_fill; 
+    reg [6:0] wr_ptr;
+    reg [6:0] rd_ptr;
     
     wire [DATA_WIDTH-1:0] fifo1_out_data;
     wire [DATA_WIDTH-1:0] fifo2_out_data;
@@ -40,7 +39,6 @@ module line_buffer #(
             out_row1 <= 0;
             out_row2 <= 0;
             valid_out <= 0;
-            state_fill <= 0;
             
             // clear buffers (optional, typically BRAM doesn't need this, but good for sim)
             // skipping loop for synthesis efficiency; rely on valid logic
@@ -56,7 +54,7 @@ module line_buffer #(
             fifo_row2[wr_ptr] <= fifo1_out_data;
             
             // Manage pointers
-            if (wr_ptr == image_width - 1) begin
+            if ({1'b0, wr_ptr} == image_width - 8'd1) begin
                 wr_ptr <= 0;
             end else begin
                 wr_ptr <= wr_ptr + 1;

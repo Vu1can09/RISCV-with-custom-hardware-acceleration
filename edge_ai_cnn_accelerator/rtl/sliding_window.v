@@ -45,9 +45,9 @@ module sliding_window #(
             // window_out[0*8 +: 8] = bottom_right
             
             window_out <= {
-                col_row0, r2_c2, r2_c1, // Bottom row: right, mid, left
-                col_row1, r1_c2, r1_c1, // Middle row: right, mid, left
-                col_row2, r0_c2, r0_c1  // Top row: right, mid, left
+                col_row0, r2_c2, r2_c0, // Bottom row: right, mid, left
+                col_row1, r1_c2, r1_c0, // Middle row: right, mid, left
+                col_row2, r0_c2, r0_c0  // Top row: right, mid, left
             };
             valid_out <= 1'b1;
         end else begin

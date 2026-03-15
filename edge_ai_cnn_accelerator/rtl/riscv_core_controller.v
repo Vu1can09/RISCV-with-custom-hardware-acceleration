@@ -76,8 +76,14 @@ module riscv_core_controller (
                 FINISH: begin
                     // Execution done
                 end
+                default: begin
+                    state <= INIT_MEM;
+                end
             endcase
         end
     end
+
+    // Suppress unused-signal warnings for mem_rdata bits not checked
+    wire _unused = &{1'b0, mem_rdata[31:2], mem_rdata[0], 1'b0};
 
 endmodule

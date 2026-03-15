@@ -1,5 +1,5 @@
 $date
-	Sat Mar 14 12:59:16 2026
+	Sun Mar 15 16:48:02 2026
 $end
 $version
 	Icarus Verilog
@@ -21,36 +21,38 @@ $var wire 1 & clk $end
 $var wire 32 ) mem_rdata [31:0] $end
 $var wire 1 ' mem_ready $end
 $var wire 1 ( rst_n $end
-$var parameter 4 * CONF_C $end
-$var parameter 4 + CONF_H $end
-$var parameter 4 , CONF_W $end
-$var parameter 4 - FINISH $end
-$var parameter 4 . INIT_MEM $end
-$var parameter 4 / POLL $end
-$var parameter 4 0 START $end
-$var reg 32 1 mem_addr [31:0] $end
+$var wire 1 * _unused $end
+$var parameter 4 + CONF_C $end
+$var parameter 4 , CONF_H $end
+$var parameter 4 - CONF_W $end
+$var parameter 4 . FINISH $end
+$var parameter 4 / INIT_MEM $end
+$var parameter 4 0 POLL $end
+$var parameter 4 1 START $end
+$var reg 32 2 mem_addr [31:0] $end
 $var reg 1 # mem_ren $end
-$var reg 32 2 mem_wdata [31:0] $end
+$var reg 32 3 mem_wdata [31:0] $end
 $var reg 1 ! mem_wen $end
-$var reg 4 3 state [3:0] $end
+$var reg 4 4 state [3:0] $end
 $upscope $end
 $upscope $end
 $enddefinitions $end
 $comment Show the parameter values. $end
 $dumpall
-b100 0
-b101 /
-b0 .
-b110 -
-b1 ,
-b10 +
-b11 *
+b100 1
+b101 0
+b0 /
+b110 .
+b1 -
+b10 ,
+b11 +
 $end
 #0
 $dumpvars
+b0 4
 b0 3
 b0 2
-b0 1
+0*
 b10 )
 0(
 0'
@@ -71,7 +73,7 @@ $end
 0&
 1(
 #25000
-b1 3
+b1 4
 1&
 #30000
 0&
@@ -80,9 +82,9 @@ b0 $
 b0 )
 1!
 b1000 "
-b1000 2
+b1000 3
 b10000 %
-b10000 1
+b10000 2
 1&
 #40000
 0&
@@ -93,25 +95,25 @@ b10000 1
 #50000
 0&
 #55000
-b10 3
+b10 4
 1!
 1&
 #60000
 0&
 #65000
-b11 3
+b11 4
 b10100 %
-b10100 1
+b10100 2
 1!
 1&
 #70000
 0&
 #75000
-b100 3
+b100 4
 b11 "
-b11 2
+b11 3
 b11000 %
-b11000 1
+b11000 2
 1!
 1&
 #80000
@@ -119,17 +121,17 @@ b11000 1
 #85000
 b10 $
 b10 )
-b101 3
+b101 4
 b1 "
-b1 2
+b1 3
 b0 %
-b0 1
+b0 2
 1!
 1&
 #90000
 0&
 #95000
-b110 3
+b110 4
 1#
 0!
 1&

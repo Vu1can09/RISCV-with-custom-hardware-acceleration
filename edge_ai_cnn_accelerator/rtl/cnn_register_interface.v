@@ -67,6 +67,7 @@ module cnn_register_interface (
                     8'h18: channels <= wdata[7:0];
                     8'h1C: kernel_size <= wdata[7:0];
                     8'h20: num_filters <= wdata[7:0];
+                    default: ; // Unmapped address — no action
                 endcase
             end else if (ren) begin
                 ready <= 1'b1;
@@ -85,5 +86,8 @@ module cnn_register_interface (
             end
         end
     end
+
+    // Suppress unused-signal warning for upper address bits
+    wire _unused = &{1'b0, addr[31:8], 1'b0};
 
 endmodule
