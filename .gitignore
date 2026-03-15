@@ -1,0 +1,7 @@
+*.vvp
+*.vcd
+*.fst
+sim_out/
+venv/
+__pycache__/
+*.log

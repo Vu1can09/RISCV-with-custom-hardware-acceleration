@@ -15,7 +15,8 @@
 
 module riscv_core_top (
     input  wire        clk,
-    input  wire        reset
+    input  wire        reset,
+    output wire        system_done
 );
 
     //==========================================================================
@@ -306,16 +307,20 @@ module riscv_core_top (
     // Memory-Mapped CNN Accelerator Integration
     //==========================================================================
     wire cnn_done;
+    wire cnn_bus_ren = exmem_mem_read && is_cnn_addr;
 
-    edge_ai_cnn_top u_cnn_accel (
-        .clk(clk),
-        .rst_n(~reset),
-        .bus_we(exmem_mem_write && is_cnn_addr),
-        .bus_addr(exmem_alu_result - 32'h0000_1000), // Normalize to 0x00 offset
-        .bus_din(exmem_rs2_data),
-        .bus_dout(cnn_read_data),
-        .cnn_done(cnn_done)
+    edge_ai_cnn_peripheral u_cnn_accel (
+        .clk      (clk),
+        .rst_n    (~reset),
+        .bus_we   (exmem_mem_write && is_cnn_addr),
+        .bus_ren  (cnn_bus_ren),
+        .bus_addr (exmem_alu_result - 32'h0000_1000), // Normalize to 0x00 offset
+        .bus_din  (exmem_rs2_data),
+        .bus_dout (cnn_read_data),
+        .cnn_done (cnn_done)
     );
+
+    assign system_done = cnn_done;
 
     //==========================================================================
     // Pipeline Register: MEM/WB

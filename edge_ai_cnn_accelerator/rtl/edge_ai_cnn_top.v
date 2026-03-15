@@ -39,6 +39,8 @@ module edge_ai_cnn_top (
     wire start_req;
     wire conv_done;
 
+    wire [31:0] _unused_img_addr, _unused_wt_addr, _unused_fm_addr;
+
     cnn_register_interface u_reg_if (
         .clk          (clk),
         .rst_n        (rst_n),
@@ -99,7 +101,7 @@ module edge_ai_cnn_top (
 
     // Unused output sinks (prevent synthesis warnings)
     // k_size, num_f, wr_out, nxt_pix are reserved for future multi-layer support
-    wire [31:0] _unused_img_addr, _unused_wt_addr, _unused_fm_addr;
+    // unused outputs
     wire _unused = &{1'b0, k_size, num_f, wr_out, nxt_pix, fm_out_data, fm_out_valid,
                      _unused_img_addr, _unused_wt_addr, _unused_fm_addr, 1'b0};
 
