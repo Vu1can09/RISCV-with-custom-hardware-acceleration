@@ -1,9 +1,9 @@
-# 🚀 RISC-V RV32I Processor & Custom LeNet-5 Edge AI CNN Accelerator
+# 🚀 RISC-V RV32I Processor & Custom Edge AI CNN Accelerator
 
-A complete, high-performance **System-on-Chip (SoC)** combining a custom **RISC-V RV32I Pipelined Processor** with a memory-mapped **LeNet-5 CNN Hardware Accelerator**. This project bridges the gap between software-defined AI and high-efficiency silicon hardware.
+A complete **hardware/verification** project combining a custom **RISC-V RV32I 5-stage pipelined processor** with a memory-mapped **CNN hardware accelerator peripheral**. The goal is to offload convolution-heavy workloads from the CPU into a dedicated datapath built from line buffers, a sliding window generator, and a pipelined MAC array.
 
 > [!IMPORTANT]
-> **ASIC Ready**: This design has been verified through the **OpenLane ASIC Flow**, targeting a **100MHz Fmax** with optimized Synopsys Design Constraints (SDC) and DFFRAM memory scaling for silicon constraints.
+> **OpenLane collateral included**: `openlane/system_top/` contains an OpenLane config for `system_top` (100 MHz target clock, DFFRAM enabled, SDC constraints included).
 
 ---
 
@@ -12,10 +12,10 @@ A complete, high-performance **System-on-Chip (SoC)** combining a custom **RISC-
 This repository provides a full-stack hardware/software co-design of an AI-enabled microprocessor. Instead of executing neural network math sequentially on a standard CPU, this system offloads the intense computations of a **LeNet-5 CNN** to a custom-designed **Hardware Accelerator**, achieving massive parallel throughput via a MAC multiplier array and streaming line buffers.
 
 ### ⚡ Technical Highlights
-- **Full LeNet-5 Inference Pipeline**: `Conv1 → ReLU → Pool1 → Conv2 → ReLU → Pool2 → FC → Classification`.
-- **Industrial Bus Architecture**: Integrated via **AXI4-Lite** (Control) and **AXI4 Master** (Data/DMA).
+- **CNN inference datapath**: `Conv → (BN) → (Skip Add) → Activation → Pool` (×2) → `FC` → score readback.
+- **Industrial bus architecture**: **AXI4-Lite Slave** (control/MMIO) + **AXI4 Master** (DMA/data movement) exposed at the top (`rtl/system_top.v`).
 - **PPA Optimization**: Implements **Operand Isolation**, **Clock Gating**, and **Deep Pipelining** for energy efficiency and high clock rates.
-- **Quantized Inference**: INT8 pixel and weight precision (compatible with modern TinyML standards).
+- **Quantized datapath**: INT8 pixels/weights/features with wider accumulation internally.
 - **Burst DMA Engine**: High-bandwidth data movement between external memory and localized SRAM.
 - **High-Resolution Support**: Processes feature maps up to **2048×2048 pixels**.
 
@@ -30,8 +30,8 @@ This repository provides a full-stack hardware/software co-design of an AI-enabl
 │  │  5-Stage Pipeline             │  │
 │  │  IF → ID → EX → MEM → WB     │  │
 │  └──────────────┬────────────────┘  │
-│                 │ MMIO Bus           │
-│                 │ (addr ≥ 0x1000)    │
+│                 │ AXI4-Lite / MMIO   │
+│                 │ (addr[7:0] decode) │
 │  ┌──────────────▼────────────────┐  │
 │  │  edge_ai_cnn_peripheral.v     │  │
 │  │                               │  │
@@ -149,10 +149,13 @@ Each convolution layer internally contains:
 │   ├── scripts/                      # Automated sim & test scripts
 │   ├── python_reference/             # NumPy ground truth models
 │   └── docs/                         # Detailed architecture docs
+├── openlane/                         # OpenLane ASIC flow collateral (system_top)
 ├── synth/                            # Synthesis output netlists
 ├── diagrams/                         # High-res block diagrams
 ├── docs/                             # Project-level documentation
-└── sim/                              # CPU simulation collateral
+├── python/                            # Python stress/utility scripts (test generation)
+├── sim/                              # Legacy CPU-only sim script (may be out-of-date)
+└── tb/                               # Mixed/in-progress testbenches
 ```
 
 ---
@@ -199,6 +202,10 @@ Want to prove the hardware math is correct? Run our Python model to see the exac
 python3 python_reference/cnn_reference_model.py
 ```
 
+### Notes on simulation folders
+- **Recommended**: `edge_ai_cnn_accelerator/scripts/run_simulation.sh` (self-contained accelerator + testbench flow).
+- **Legacy/in-progress**: `sim/run_simulation.sh` and some top-level `tb/` benches may reference older module names/ports and can require updates before they run cleanly.
+
 ---
 
 ## 🔍 Module Breakdown (For Students)
@@ -234,11 +241,11 @@ Every major module has its own dedicated testbench in the `tb/` folder (e.g., `m
 
 ## 🗺️ MMIO Register Map
 
-The RISC-V CPU configures the CNN accelerator by writing to these memory-mapped registers (base address `0x1000`):
+The CNN peripheral register interface is defined in `rtl/cnn_register_interface.v`. Decode is performed on `addr[7:0]`, so the register block behaves like a **256-byte window**; when integrating via AXI4-Lite you can map it at any base address (as long as the low 8 bits match the offsets below).
 
 | Offset | Register | Width | Description |
 |--------|----------|-------|-------------|
-| `0x00` | CONTROL  | 1-bit | `[0]` START pulse, `[1]` DONE status |
+| `0x00` | CONTROL  | 3-bit | `[0]` START pulse, `[1]` DONE status, `[2]` DMA_BUSY |
 | `0x04` | IMAGE_ADDR | 32-bit | Base address of input image |
 | `0x08` | WEIGHT_ADDR | 32-bit | Base address of weight memory |
 | `0x0C` | FEATURE_ADDR | 32-bit | Base address of output feature map |
@@ -255,6 +262,16 @@ The RISC-V CPU configures the CNN accelerator by writing to these memory-mapped 
 | `0x38` | L2_FILTERS | 8-bit | Layer 2 output filters |
 | `0x3C` | FC_INPUTS | 16-bit | FC flattened input size |
 | `0x40` | FC_OUTPUTS | 8-bit | FC output classes |
+| `0x44` | STRIDE_CFG | 8-bit | `[3:0]` conv stride, `[7:4]` pool stride |
+| `0x48` | PAD_CFG | 8-bit | Zero-pad size |
+| `0x4C` | BN_MEAN | 16-bit | Signed mean |
+| `0x50` | BN_SCALE | 16-bit | Q8.8 scale |
+| `0x54` | BN_OFFSET | 16-bit | Signed offset |
+| `0x58` | ACTIVATION_MODE | 2-bit | 0=ReLU, 1=Sigmoid, 2=pass |
+| `0x5C` | POWER_GATE_CFG | 4-bit | Clock enables for L1/L2/FC/DMA |
+| `0x60` | SKIP_ENABLE | 2-bit | Enable skip add per layer |
+| `0x64` | AXI_DMA_DIR | 1-bit | 0=DDR→SRAM, 1=SRAM→DDR |
+| `0x80–0xBC` | RESULT[0..15] | 32-bit | FC output scores (read-only) |
 
 ![MMIO Register Map](diagrams/mmio_register_map.png)
 
