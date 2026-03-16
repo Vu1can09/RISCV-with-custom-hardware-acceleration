@@ -103,4 +103,15 @@ Each convolution layer pipeline (`cnn_layer_pipeline.v`) internally chains:
 
 Between layers, INT8 quantization converts 32-bit accumulator outputs back to 8-bit for the next layer's input, matching industry-standard quantized inference (Google Edge TPU, Apple Neural Engine).
 
-The **FC Layer** reads the flattened pool output, multiplies against weight memory, accumulates with bias, and produces final class scores.
+### ASIC Implementation Flow
+
+The design is optimized for a full-backend ASIC implementation using the **OpenLane/Sky130** flow:
+- **Target Frequency**: 100MHz (10.0ns clock period).
+- **Physical Design**: Targeted area of 3.5mm x 3.5mm with 40% core utilization.
+- **Memory Scaling**: Integrates **DFFRAM** macros to satisfy high-speed timing and footprint constraints for localized SRAM buffers.
+- **Timing Constraints**: Uses a dedicated SDC (Synopsys Design Constraints) file to bound AXI interface delays and clock uncertainty.
+
+### PPA Optimizations
+- **Dynamic Power**: Implements **Clock Gating** in the `edge_ai_cnn_peripheral` wrapper to disable inactive layers.
+- **Operand Isolation**: Integrated into the MAC array to prevent register toggling during idle cycles.
+- **Area Efficiency**: Optimized dual-port SRAM mapping and shared weights memory for multi-layer operations.

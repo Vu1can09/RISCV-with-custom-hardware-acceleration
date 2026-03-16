@@ -6,3 +6,4 @@ venv/
 __pycache__/
 *.log
 openlane/system_top/runs/
+.DS_Store
