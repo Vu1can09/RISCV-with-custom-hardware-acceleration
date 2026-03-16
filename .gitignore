@@ -5,3 +5,4 @@ sim_out/
 venv/
 __pycache__/
 *.log
+openlane/system_top/runs/

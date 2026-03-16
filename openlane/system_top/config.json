@@ -1,6 +1,6 @@
 {
     "DESIGN_NAME": "system_top",
-    "VERILOG_FILES": "dir::../../rtl/*.v",
+    "VERILOG_FILES": "dir::src/*.v",
     "CLOCK_PORT": "clk",
     "CLOCK_PERIOD": 10.0,
     "DIE_AREA": "0 0 3500 3500",
