@@ -1,40 +1,28 @@
-# 🚀 RISC-V RV32I Processor & Custom Edge AI CNN Accelerator
+# 🚀 RISC-V RV32I Processor & Custom LeNet-5 Edge AI CNN Accelerator
 
-A complete, from-scratch **RISC-V RV32I Pipelined Processor** combined with a custom **Memory-Mapped LeNet-5 CNN Hardware Accelerator** for Edge AI applications.
+A complete, high-performance **System-on-Chip (SoC)** combining a custom **RISC-V RV32I Pipelined Processor** with a memory-mapped **LeNet-5 CNN Hardware Accelerator**. This project bridges the gap between software-defined AI and high-efficiency silicon hardware.
 
-> **Educational Mini Project** — Designed to be a highly accessible learning resource for electronics, computer engineering, and computer science students exploring processor architecture, hardware acceleration, and FPGA/ASIC design flows.
+> [!IMPORTANT]
+> **ASIC Ready**: This design has been verified through the **OpenLane ASIC Flow**, targeting a **100MHz Fmax** with optimized Synopsys Design Constraints (SDC) and DFFRAM memory scaling for silicon constraints.
 
 ---
 
-## 📖 What is this project?
+## 📖 Project Overview
 
-This repository bridges the gap between software instructions (RISC-V Assembly) and dedicated silicon hardware (Verilog). 
+This repository provides a full-stack hardware/software co-design of an AI-enabled microprocessor. Instead of executing neural network math sequentially on a standard CPU, this system offloads the intense computations of a **LeNet-5 CNN** to a custom-designed **Hardware Accelerator**, achieving massive parallel throughput via a MAC multiplier array and streaming line buffers.
 
-Instead of doing all the heavy lifting in software, the RISC-V processor acts as the "Brain" and offloads the intense math of Artificial Intelligence (AI) to a custom-designed **Convolutional Neural Network (CNN) Accelerator** — implementing a full **LeNet-5** inference pipeline in hardware!
-
-### 🧠 Why Hardware Acceleration for CNNs?
-CNNs are the backbone of modern AI image recognition (like autonomous driving or face ID). However, running them on a standard CPU is slow because CPUs compute math sequentially. 
-
-By designing a **Hardware Accelerator**, we can utilize hundreds of parallel multipliers (a MAC Array) to compute an entire 3x3 window of image pixels simultaneously, drastically reducing the clock cycles needed for AI inference.
-
-### ⚡ Key Features
-- **Full LeNet-5 Pipeline**: Conv1 → ReLU → Pool → Conv2 → ReLU → Pool → FC → Classification
-- **Industrial Bus Standards**: Features **AXI4 Master** (Data) and **AXI4-Lite Slave** (Control) interfaces
-- **PPA Optimization**: Implements **Operand Isolation**, **Clock Gating**, and **Deep Pipelining** for max Fmax and low power
-- **INT8 Quantized Inference**: 8-bit pixel/weight precision (same as Google Edge TPU)
-- **DMA Engine**: Burst memory transfers without CPU stalling
-- **HD Image Support**: Processes images up to 2048×2048 pixels
-- **ASIC/FPGA Ready**: Pure synthesizable Verilog 2001, zero `$display` in RTL
+### ⚡ Technical Highlights
+- **Full LeNet-5 Inference Pipeline**: `Conv1 → ReLU → Pool1 → Conv2 → ReLU → Pool2 → FC → Classification`.
+- **Industrial Bus Architecture**: Integrated via **AXI4-Lite** (Control) and **AXI4 Master** (Data/DMA).
+- **PPA Optimization**: Implements **Operand Isolation**, **Clock Gating**, and **Deep Pipelining** for energy efficiency and high clock rates.
+- **Quantized Inference**: INT8 pixel and weight precision (compatible with modern TinyML standards).
+- **Burst DMA Engine**: High-bandwidth data movement between external memory and localized SRAM.
+- **High-Resolution Support**: Processes feature maps up to **2048×2048 pixels**.
 
 ---
 
 ## 📐 System Architecture
 
-### 1. Top-Level Integration
-
-The system centers around the RISC-V Controller acting as the "Brain", dispatching configuration and execution commands downstream to the multi-layer CNN subsystem via a Memory-Mapped I/O (MMIO) bus.
-
-```text
 ┌──────────────────────────────────────┐
 │          system_top.v                │
 │  ┌────────────────────────────────┐  │
